@@ -10,6 +10,7 @@ export default function TeacherFormPage() {
   const navigate = useNavigate();
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   const [form, setForm] = useState({
     first_name: '', middle_name: '', last_name: '',
@@ -51,12 +52,26 @@ export default function TeacherFormPage() {
     queryFn: () => api.get('/academics/sessions').then(r => r.data),
     enabled: isEdit,
   });
+  const { data: classSubjects = [] } = useQuery<any[]>({
+    queryKey: ['class-subjects'], queryFn: () => api.get('/academics/class-subjects').then(r => r.data), enabled: isEdit,
+  });
   const { data: teacherRecord, refetch: refetchTeacher } = useQuery<any>({
     queryKey: ['teacher', id],
     queryFn: () => api.get(`/teachers/${id}`).then(r => r.data),
     enabled: isEdit,
   });
-  const [assignForm, setAssignForm] = useState({ class_ids: [] as string[], subject_ids: [] as string[], session_id: '' });
+  const [assignForm, setAssignForm] = useState({ class_ids: [] as string[], subject_ids: [] as string[], session_id: '', section_id: '' });
+  const { data: sections = [] } = useQuery<any[]>({
+    queryKey: ['sections', assignForm.class_ids[0]],
+    queryFn: () => api.get('/academics/sections', { params: { class_id: assignForm.class_ids[0] } }).then(r => r.data),
+    enabled: assignForm.class_ids.length === 1,
+  });
+  const selectedSession = assignForm.session_id || sessions?.find(item => item.is_current)?.id;
+  const availableSubjects = (subjects || []).filter(subject => assignForm.class_ids.length > 0 && assignForm.class_ids.every(cid =>
+    classSubjects.some(mapping => mapping.class_id === cid && mapping.subject_id === subject.id && (!mapping.session_id || mapping.session_id === selectedSession))));
+  useEffect(() => {
+    setAssignForm(previous => ({ ...previous, subject_ids: previous.subject_ids.filter(sid => availableSubjects.some(subject => subject.id === sid)), section_id: previous.class_ids.length === 1 ? previous.section_id : '' }));
+  }, [assignForm.class_ids.join(','), selectedSession, JSON.stringify(classSubjects)]);
 
   useEffect(() => {
     if (id) {
@@ -194,7 +209,7 @@ export default function TeacherFormPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
               <select name="branch_id" value={form.branch_id} onChange={handleChange} className="input-field">
                 <option value="">Select Branch</option>
-                {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {branches?.map(b => <option key={b.id} value={b.id}>{(b as any).branch_name || b.name}</option>)}
               </select>
             </div>
             <div>
@@ -263,9 +278,10 @@ export default function TeacherFormPage() {
                   <li key={a.id} className="flex justify-between border-b py-1">
                     <span>{a.class_name} · {a.subject_name}{a.session_name ? ` · ${a.session_name}` : ''}</span>
                     <button type="button" className="text-red-600 text-xs" onClick={async () => {
-                      await api.delete(`/teachers/${id}/assignments/${a.id}`);
-                      toast.success('Assignment removed');
-                      refetchTeacher();
+                      try {
+                        await api.delete(`/teachers/${id}/assignments/${a.id}`);
+                        toast.success('Assignment removed'); refetchTeacher();
+                      } catch (error: any) { toast.error(error.response?.data?.error || error.message || 'Could not remove assignment'); }
                     }}>Remove</button>
                   </li>
                 ))}
@@ -286,12 +302,13 @@ export default function TeacherFormPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">Subjects</label>
                 <div className="max-h-36 overflow-y-auto border rounded-lg p-2 space-y-1">
-                  {(Array.isArray(subjects) ? subjects : []).map((s: any) => (
+                  {availableSubjects.map((s: any) => (
                     <label key={s.id} className="flex items-center gap-2 text-sm">
                       <input type="checkbox" checked={assignForm.subject_ids.includes(s.id)} onChange={() => setAssignForm((f) => ({ ...f, subject_ids: f.subject_ids.includes(s.id) ? f.subject_ids.filter((x) => x !== s.id) : [...f.subject_ids, s.id] }))} />
                       {s.name}
                     </label>
                   ))}
+                  {!availableSubjects.length && <p className="text-xs text-gray-500">Select classes first. Subjects must be mapped to every selected class for this session in Academics.</p>}
                 </div>
               </div>
               <div>
@@ -300,15 +317,20 @@ export default function TeacherFormPage() {
                   <option value="">Current session</option>
                   {(Array.isArray(sessions) ? sessions : []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-                <button type="button" className="btn-primary mt-3" onClick={async () => {
+                {assignForm.class_ids.length === 1 && <select aria-label="Assignment section" className="input-field mt-2" value={assignForm.section_id} onChange={event => setAssignForm(previous => ({ ...previous, section_id: event.target.value }))}>
+                  <option value="">All sections</option>
+                  {sections.map(section => <option key={section.id} value={section.id}>{section.name}</option>)}
+                </select>}
+                <button type="button" disabled={assigning || !assignForm.class_ids.length || !assignForm.subject_ids.length || !selectedSession} className="btn-primary mt-3" onClick={async () => {
+                  setAssigning(true);
                   try {
                     const res = await api.post(`/teachers/${id}/assignments`, assignForm);
                     toast.success(res.data.message || 'Assigned');
-                    setAssignForm({ class_ids: [], subject_ids: [], session_id: '' });
+                    setAssignForm({ class_ids: [], subject_ids: [], session_id: '', section_id: '' });
                     refetchTeacher();
                   } catch (err: any) {
-                    toast.error(err.response?.data?.error || 'Failed to assign');
-                  }
+                    toast.error(err.response?.data?.error || err.message || 'Failed to assign');
+                  } finally { setAssigning(false); }
                 }}>Assign selected</button>
               </div>
             </div>

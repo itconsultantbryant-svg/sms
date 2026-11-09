@@ -35,11 +35,13 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
+    window.dispatchEvent(new Event('svl:institution-changed'));
   };
 
   const clearInstitution = () => {
     setSelectedInstitutionState(null);
     localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event('svl:institution-changed'));
   };
 
   return (

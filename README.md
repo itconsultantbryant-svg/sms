@@ -16,6 +16,7 @@ Neon hosts the database; Vercel runs both the frontend and the backend API. Sepa
 - React 18, Vite, Tailwind CSS, React Router and TanStack Query.
 - Multi-institution administration, role dashboards, admissions/student records, attendance, teaching, gradebooks/results, fees, payroll, school operations and reporting.
 - Live UI freshness is polling-based (normally 15 seconds), not WebSocket push.
+- Hosted offline mode supports downloaded academic pages and queued attendance, score-entry and teacher-assignment saves, with deduplicated replay and conflict review. See [offline scope and remaining PRD work](OFFLINE_AND_PRD_IMPLEMENTATION.md); high-risk actions remain online-only.
 
 ## Documentation and release status
 

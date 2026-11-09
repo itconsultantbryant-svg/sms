@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -12,9 +14,19 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
-    plugins: [react()],
+    plugins: [react(), ...(mode === 'electron' ? [] : [{
+      name: 'afrimind-offline-shell',
+      writeBundle(options, bundle) {
+        const assets = [...new Set(['/index.html', ...Object.keys(bundle).filter(name => /\.(js|css)$/.test(name)).map(name => `/${name}`)])];
+        const source = fs.readFileSync(path.resolve('offline-worker.js'), 'utf8')
+          .replace('__AFRIMIND_CACHE__', `afrimind-shell-${Date.now()}`)
+          .replace('__AFRIMIND_ASSETS__', JSON.stringify(assets));
+        fs.writeFileSync(path.resolve(options.dir || 'dist', 'service-worker.js'), source);
+      },
+    }])],
     server: {
-      port: 3000,
+      port: 5173,
+      proxy: { '/api': 'http://localhost:3001' },
     },
     build: {
       outDir: 'dist',

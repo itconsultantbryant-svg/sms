@@ -78,60 +78,7 @@ communicationRouter.get('/sms', (req: AuthRequest, res: Response) => {
 });
 
 communicationRouter.post('/sms', authorize('platform_admin', 'institution_admin', 'staff', 'teacher'), (req: AuthRequest, res: Response) => {
-  try {
-    const { phone_numbers, message, recipient_type } = req.body;
-    if (!message || !String(message).trim()) {
-      res.status(400).json({ error: 'Message is required' });
-      return;
-    }
-    if (!req.institution_id) {
-      res.status(400).json({ error: 'Institution context required' });
-      return;
-    }
-
-    const db = getDatabase();
-    const type = recipient_type || 'individual';
-    const phones = resolvePhoneNumbers(db, req.institution_id, type, phone_numbers);
-
-    if (phones.length === 0) {
-      res.status(400).json({
-        error: type === 'individual'
-          ? 'Phone numbers are required'
-          : 'No phone numbers found for the selected recipient group',
-      });
-      return;
-    }
-
-    const id = generateId();
-    db.prepare(`
-      INSERT INTO sms_messages (
-        id, institution_id, sender_id, recipient_type, phone_numbers, message,
-        total_recipients, sent_count, status, sent_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent', datetime('now'))
-    `).run(
-      id,
-      req.institution_id,
-      req.user?.id || null,
-      type,
-      phones.join(','),
-      message,
-      phones.length,
-      phones.length
-    );
-
-    // Best-effort audit log
-    try {
-      db.prepare(`
-        INSERT INTO communication_log (id, institution_id, channel, reference_id, sender_id, recipient, content, status)
-        VALUES (?, ?, 'sms', ?, ?, ?, ?, 'sent')
-      `).run(generateId(), req.institution_id, id, req.user?.id || null, phones.slice(0, 3).join(','), message);
-    } catch {}
-
-    res.status(201).json({ id, total_recipients: phones.length, message: 'SMS queued/sent' });
-  } catch (err: any) {
-    console.error('SMS send error:', err);
-    res.status(500).json({ error: err.message });
-  }
+  res.status(503).json({ error: 'SMS delivery is not configured. No message has been sent. Configure an approved provider before enabling delivery.', code: 'SMS_PROVIDER_REQUIRED' });
 });
 
 communicationRouter.get('/emails', (req: AuthRequest, res: Response) => {
@@ -156,61 +103,7 @@ communicationRouter.get('/emails', (req: AuthRequest, res: Response) => {
 });
 
 communicationRouter.post('/emails', authorize('platform_admin', 'institution_admin', 'staff', 'teacher'), (req: AuthRequest, res: Response) => {
-  try {
-    const { email_addresses, subject, body, recipient_type, is_html } = req.body;
-    if (!subject || !body) {
-      res.status(400).json({ error: 'Subject and body are required' });
-      return;
-    }
-    if (!req.institution_id) {
-      res.status(400).json({ error: 'Institution context required' });
-      return;
-    }
-
-    const db = getDatabase();
-    const type = recipient_type || 'individual';
-    const emails = resolveEmails(db, req.institution_id, type, email_addresses);
-
-    if (emails.length === 0) {
-      res.status(400).json({
-        error: type === 'individual'
-          ? 'Email addresses are required'
-          : 'No email addresses found for the selected recipient group',
-      });
-      return;
-    }
-
-    const id = generateId();
-    db.prepare(`
-      INSERT INTO email_messages (
-        id, institution_id, sender_id, recipient_type, email_addresses, subject, body,
-        is_html, total_recipients, sent_count, status, sent_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', datetime('now'))
-    `).run(
-      id,
-      req.institution_id,
-      req.user?.id || null,
-      type,
-      emails.join(','),
-      subject,
-      body,
-      is_html ? 1 : 0,
-      emails.length,
-      emails.length
-    );
-
-    try {
-      db.prepare(`
-        INSERT INTO communication_log (id, institution_id, channel, reference_id, sender_id, recipient, subject, content, status)
-        VALUES (?, ?, 'email', ?, ?, ?, ?, ?, 'sent')
-      `).run(generateId(), req.institution_id, id, req.user?.id || null, emails.slice(0, 3).join(','), subject, body);
-    } catch {}
-
-    res.status(201).json({ id, total_recipients: emails.length, message: 'Email queued/sent' });
-  } catch (err: any) {
-    console.error('Email send error:', err);
-    res.status(500).json({ error: err.message });
-  }
+  res.status(503).json({ error: 'Email delivery is not configured. No message has been sent. Configure an approved provider before enabling delivery.', code: 'EMAIL_PROVIDER_REQUIRED' });
 });
 
 communicationRouter.get('/announcements', (req: AuthRequest, res: Response) => {

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { getDatabase } from '../database/init';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, requirePermission } from '../middleware/auth';
 import { injectTenant, requireTenant } from '../middleware/tenant';
 import { generateId } from '../utils/helpers';
 
@@ -9,6 +9,26 @@ export const attendanceRouter = Router();
 // Apply tenant middleware to ALL routes
 attendanceRouter.use(injectTenant);
 attendanceRouter.use(requireTenant);
+
+function attendanceInputError(req: AuthRequest, classId: string, sectionId: string | null, subjectId: string | null, records: any[]): string | null {
+  const db = getDatabase();
+  if (!db.prepare('SELECT id FROM classes WHERE id = ? AND institution_id = ?').get(classId, req.institution_id)) return 'Class does not belong to this school';
+  if (sectionId && !db.prepare('SELECT id FROM sections WHERE id = ? AND class_id = ? AND institution_id = ?').get(sectionId, classId, req.institution_id)) return 'Section does not belong to this class';
+  if (req.user?.user_type === 'teacher') {
+    const allowed = db.prepare(`SELECT ta.id FROM teacher_assignments ta JOIN employees e ON e.id = ta.employee_id
+      WHERE e.user_id = ? AND ta.institution_id = ? AND ta.class_id = ?
+      AND (? IS NULL OR ta.subject_id = ?) AND (? IS NULL OR ta.section_id IS NULL OR ta.section_id = ?)`).get(req.user.id, req.institution_id, classId, subjectId, subjectId, sectionId, sectionId);
+    if (!allowed) return 'You are not assigned to this class, subject and section';
+  }
+  const seen = new Set<string>();
+  for (const row of records) {
+    if (!row || seen.has(row.student_id) || !['present', 'absent', 'late', 'excused'].includes(row.status)) return 'Invalid or duplicate attendance record';
+    seen.add(row.student_id);
+    const student = db.prepare('SELECT id, section_id FROM students WHERE id = ? AND institution_id = ? AND class_id = ?').get(row.student_id, req.institution_id, classId) as any;
+    if (!student || (sectionId && student.section_id !== sectionId)) return 'Every student must belong to the selected school, class and section';
+  }
+  return null;
+}
 
 attendanceRouter.get('/sessions', (req: AuthRequest, res: Response) => {
   const db = getDatabase();
@@ -79,7 +99,7 @@ attendanceRouter.get('/sessions/:id', (req: AuthRequest, res: Response) => {
   res.json({ ...(session as any), records });
 });
 
-attendanceRouter.post('/take', (req: AuthRequest, res: Response) => {
+attendanceRouter.post('/take', requirePermission('attendance.mark'), (req: AuthRequest, res: Response) => {
   try {
     const { class_id, section_id, subject_id, session_id, term_id, date, type, records } = req.body;
 
@@ -93,6 +113,11 @@ attendanceRouter.post('/take', (req: AuthRequest, res: Response) => {
     }
 
     const db = getDatabase();
+    const invalid = attendanceInputError(req, class_id, section_id || null, subject_id || null, records);
+    if (invalid) { res.status(400).json({ error: invalid }); return; }
+    if (session_id && !db.prepare('SELECT id FROM academic_sessions WHERE id = ? AND institution_id = ?').get(session_id, req.institution_id)) {
+      res.status(400).json({ error: 'Invalid academic session for this school' }); return;
+    }
     const attendanceSessionId = generateId();
     const teacher = db.prepare(`
       SELECT id FROM employees
@@ -146,7 +171,7 @@ attendanceRouter.post('/take', (req: AuthRequest, res: Response) => {
   }
 });
 
-attendanceRouter.put('/sessions/:id', (req: AuthRequest, res: Response) => {
+attendanceRouter.put('/sessions/:id', requirePermission('attendance.edit', 'attendance.mark'), (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { records } = req.body;
@@ -158,11 +183,13 @@ attendanceRouter.put('/sessions/:id', (req: AuthRequest, res: Response) => {
 
     const db = getDatabase();
     const institutionFilter = req.institution_id ? `AND institution_id = '${req.institution_id}'` : '';
-    const session = db.prepare(`SELECT id FROM attendance_sessions WHERE id = ? ${institutionFilter}`).get(id);
+    const session = db.prepare(`SELECT * FROM attendance_sessions WHERE id = ? ${institutionFilter}`).get(id) as any;
     if (!session) {
       res.status(404).json({ error: 'Attendance session not found' });
       return;
     }
+    const invalid = attendanceInputError(req, session.class_id, session.section_id, session.subject_id, records);
+    if (invalid) { res.status(400).json({ error: invalid }); return; }
 
     const transaction = db.transaction(() => {
       db.prepare('DELETE FROM student_attendance WHERE attendance_session_id = ?').run(id);

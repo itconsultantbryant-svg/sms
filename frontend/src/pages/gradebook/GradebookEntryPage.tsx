@@ -15,6 +15,8 @@ export default function GradebookEntryPage() {
   const isAdmin = user?.user_type === 'institution_admin' || user?.user_type === 'platform_admin';
   const [scores, setScores] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { setDirty(false); setScores({}); }, [id]);
 
   const { data, refetch, isLoading } = useQuery({
     queryKey: ['gradebook', id],
@@ -23,13 +25,13 @@ export default function GradebookEntryPage() {
   });
 
   useEffect(() => {
-    if (!data?.entries) return;
+    if (!data?.entries || dirty) return;
     const map: Record<string, string> = {};
     for (const e of data.entries) {
       map[`${e.student_id}:${e.column_id}`] = e.score == null ? '' : String(e.score);
     }
     setScores(map);
-  }, [data]);
+  }, [data, dirty]);
 
   const totalsByStudent = useMemo(() => {
     const m: Record<string, any> = {};
@@ -40,7 +42,7 @@ export default function GradebookEntryPage() {
   const canEdit = data && ['open', 'draft', 'rejected'].includes(data.status);
 
   const save = async () => {
-    if (!data) return;
+    if (!data) return false;
     setSaving(true);
     try {
       const entries = Object.entries(scores).map(([key, value]) => {
@@ -51,11 +53,13 @@ export default function GradebookEntryPage() {
           score: value === '' ? null : Number(value),
         };
       });
-      await api.put(`/gradebook/${id}/entries`, { entries });
-      toast.success('Scores saved');
-      refetch();
+      const response = await api.put(`/gradebook/${id}/entries`, { entries });
+      toast.success(response.data.offline ? 'Scores saved on this device — pending synchronization' : 'Scores saved');
+      if (!response.data.offline) { await refetch(); setDirty(false); }
+      return !response.data.offline;
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Save failed');
+      toast.error(e.response?.data?.error || e.message || 'Save failed');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -63,7 +67,10 @@ export default function GradebookEntryPage() {
 
   const submit = async () => {
     try {
-      await save();
+      if (!await save()) {
+        toast.error('Synchronize the saved scores before submitting for approval');
+        return;
+      }
       await api.post(`/gradebook/${id}/submit`);
       toast.success('Submitted for admin approval');
       refetch();
@@ -181,7 +188,7 @@ export default function GradebookEntryPage() {
                           value={scores[key] ?? ''}
                           max={c.max_score}
                           min={0}
-                          onChange={(e) => setScores((prev) => ({ ...prev, [key]: e.target.value }))}
+                          onChange={(e) => { setDirty(true); setScores((prev) => ({ ...prev, [key]: e.target.value })); }}
                         />
                       </td>
                     );

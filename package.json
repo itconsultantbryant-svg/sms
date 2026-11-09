@@ -8,7 +8,7 @@
   "license": "Proprietary",
   "scripts": {
     "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project frontend/tsconfig.json",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:e2e": "node scripts/e2e-system.mjs",
     "db:initialize": "tsx scripts/initialize-database.ts",
     "dev": "tsx watch src/index.ts",

@@ -16,11 +16,15 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!api/)(?!assets/).*)",
+      "source": "/((?!api/)(?!assets/)(?!service-worker\\.js$).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/service-worker.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
     {
       "source": "/assets/(.*)",
       "headers": [

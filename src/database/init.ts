@@ -5,6 +5,7 @@ import { gradebookLessonPermsSchema } from './schema-gradebook-lesson-perms';
 import { migrateSchoolEnhancements } from './schema-school-enhancements';
 import { ensurePortalRole } from '../utils/userAccess';
 import { getNeonDatabase, usesNeon } from './neon-db';
+import { offlineSyncSchema } from './schema-offline-sync';
 
 let db: any;
 
@@ -82,6 +83,7 @@ export function initializeDatabase(): void {
   ensureTenantColumns(database);
   migrateInstitutionBranding(database);
   migrateSchoolEnhancements();
+  database.exec(offlineSyncSchema);
   backfillUserRoles(database);
 
   console.log(`✓ Database ready (${usesNeon() ? 'Neon Postgres' : 'SQLite'})`);

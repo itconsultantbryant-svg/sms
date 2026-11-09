@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import api from '../utils/api';
 import { User } from '../types';
+import { offlineSessionFresh } from '../offline/client';
 
 interface AuthContextType {
   user: User | null;
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const res = await api.get('/auth/me');
+      if (!res.headers['x-afrimind-offline']) localStorage.setItem('afrimind_last_verified', String(Date.now()));
       setUser(res.data);
       localStorage.setItem('svl_user', JSON.stringify(res.data));
     } catch {
@@ -35,10 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('svl_token');
     if (token) {
       api.get('/auth/me')
-        .then((res) => setUser(res.data))
-        .catch(() => {
-          localStorage.removeItem('svl_token');
-          localStorage.removeItem('svl_user');
+        .then((res) => { setUser(res.data); if (!res.headers['x-afrimind-offline']) localStorage.setItem('afrimind_last_verified', String(Date.now())); })
+        .catch((error) => {
+          if (error.response?.status === 401) {
+            localStorage.removeItem('svl_token');
+            localStorage.removeItem('svl_user');
+          } else {
+            try { setUser(offlineSessionFresh() ? JSON.parse(localStorage.getItem('svl_user') || 'null') : null); } catch { setUser(null); }
+          }
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -71,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       localStorage.setItem('svl_token', res.data.token);
       localStorage.setItem('svl_user', JSON.stringify(res.data.user));
+      localStorage.setItem('afrimind_last_verified', String(Date.now()));
 
       // Clear stale license mode so the new user gets a fresh license check
       localStorage.removeItem('svl_license_mode');
@@ -91,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    delete api.defaults.headers.common['Authorization'];
     localStorage.removeItem('svl_token');
     localStorage.removeItem('svl_user');
     localStorage.removeItem('svl_selected_institution');

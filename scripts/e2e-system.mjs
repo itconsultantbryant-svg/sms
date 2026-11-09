@@ -233,6 +233,7 @@ try {
       for (const [role, actor] of Object.entries(actors)) {
         if (role === 'otherAdmin') continue;
         const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, extraHTTPHeaders: bypass ? { 'x-vercel-protection-bypass': bypass } : {} });
+        if (bypass) await context.request.get(`${base}/login`, { headers: { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' } });
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));

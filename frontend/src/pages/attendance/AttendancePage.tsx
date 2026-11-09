@@ -53,13 +53,13 @@ export default function AttendancePage() {
 
   const takeMutation = useMutation({
     mutationFn: (data: any) => api.post('/attendance/take', data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-sessions'] });
-      toast.success('Attendance saved successfully');
+      toast.success(response.data.offline ? 'Attendance saved on this device — pending synchronization' : 'Attendance saved successfully');
       setShowTake(false);
       setRecords({});
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to save attendance'),
+    onError: (err: any) => toast.error(err.response?.data?.error || err.message || 'Failed to save attendance'),
   });
 
   const handleMarkAll = (status: string) => {

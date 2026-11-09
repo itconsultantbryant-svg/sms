@@ -44,6 +44,7 @@ import { recordsRouter } from './routes/records';
 import { notificationsRouter } from './routes/notifications';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticate } from './middleware/auth';
+import { offlineConsistency } from './middleware/offline';
 
 dotenv.config();
 
@@ -79,12 +80,17 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Institution-ID']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Institution-ID', 'X-Offline-Operation', 'X-Offline-Version'],
+  exposedHeaders: ['X-Offline-Version', 'X-Offline-Replayed', 'X-Offline-Acknowledged']
 }));
 
 // Body parsing — raised for school logo base64 payloads (default 100kb is too small)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
 
 // Health check endpoint (no auth required)
 app.get('/api/health', (req, res) => {
@@ -125,7 +131,7 @@ app.use('/api/users', authenticate, usersRouter);
 app.use('/api/branches', authenticate, branchesRouter);
 app.use('/api/students', authenticate, studentsRouter);
 app.use('/api/parents', authenticate, parentsRouter);
-app.use('/api/teachers', authenticate, teachersRouter);
+app.use('/api/teachers', authenticate, offlineConsistency, teachersRouter);
 app.use('/api/teacher-dashboard', authenticate, teacherDashboardRouter);
 app.use('/api/assignments', authenticate, assignmentsRouter);
 app.use('/api/grade-approval', authenticate, gradeApprovalRouter);
@@ -135,7 +141,7 @@ app.use('/api/permissions', authenticate, permissionsRouter);
 app.use('/api/academics', authenticate, academicsRouter);
 app.use('/api/settings', authenticate, settingsRouter);
 app.use('/api/dashboard', authenticate, dashboardRouter);
-app.use('/api/attendance', authenticate, attendanceRouter);
+app.use('/api/attendance', authenticate, offlineConsistency, attendanceRouter);
 app.use('/api/timetable', authenticate, timetableRouter);
 app.use('/api/examinations', authenticate, examinationsRouter);
 app.use('/api/marks', authenticate, marksRouter);
@@ -152,9 +158,9 @@ app.use('/api/communication', authenticate, communicationRouter);
 app.use('/api/reports', authenticate, reportsRouter);
 app.use('/api/platform-admin', authenticate, platformAdminRouter);
 app.use('/api/admission', authenticate, admissionRouter);
-app.use('/api/gradebook', authenticate, gradebookRouter);
+app.use('/api/gradebook', authenticate, offlineConsistency, gradebookRouter);
 app.use('/api/lesson-plans', authenticate, lessonPlansRouter);
-app.use('/api/records', authenticate, recordsRouter);
+app.use('/api/records', authenticate, offlineConsistency, recordsRouter);
 app.use('/api/notifications', authenticate, notificationsRouter);
 
 // Error handler

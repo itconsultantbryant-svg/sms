@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { offlineAdapter } from '../offline/client';
 
 // In the web build VITE_API_URL is baked in at build time (from .env.production).
 // In the Electron desktop build VITE_API_URL is intentionally left empty and the
@@ -55,6 +56,7 @@ console.log('Initial baseURL:', initialBaseURL);
 console.log('========================');
 
 export const api = axios.create({
+  adapter: offlineAdapter(axios.getAdapter(axios.defaults.adapter)),
   baseURL: initialBaseURL,
   headers: {
     'Content-Type': 'application/json',

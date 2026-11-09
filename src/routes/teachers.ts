@@ -12,6 +12,11 @@ export const teachersRouter = Router();
 teachersRouter.use(injectTenant);
 teachersRouter.use(requireTenant);
 
+function validEmployeeLinks(db: any, institution: string, values: Record<string, any>): boolean {
+  return [['branch_id', 'branches'], ['department_id', 'departments'], ['designation_id', 'designations']].every(([field, table]) =>
+    !values[field] || !!db.prepare(`SELECT id FROM ${table} WHERE id = ? AND institution_id = ?`).get(values[field], institution));
+}
+
 teachersRouter.get('/', (req: AuthRequest, res: Response) => {
   const db = getDatabase();
   const { page = '1', limit = '20', search = '', branch = '', department = '', staff = '' } = req.query as any;
@@ -100,6 +105,9 @@ teachersRouter.post('/', authorize('platform_admin', 'institution_admin', 'hr_ma
   const db = getDatabase();
   const id = generateId();
   const userId = generateId();
+  if (!req.institution_id || !validEmployeeLinks(db, req.institution_id, { branch_id, department_id, designation_id })) {
+    res.status(400).json({ error: 'Select a school and valid branch, department and designation within that school' }); return;
+  }
   const employee_id = generateEmployeeId('TCH');
 
   // Generate credentials if requested or not provided
@@ -185,7 +193,7 @@ teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_
   const { id } = req.params;
   const {
     first_name, middle_name, last_name, gender, date_of_birth, phone, email,
-    address, photo, department_id, designation_id, qualification, experience,
+    address, photo, department_id, designation_id, branch_id, qualification, experience,
     employment_type, basic_salary, bank_name, bank_account, is_active
   } = req.body;
 
@@ -197,6 +205,9 @@ teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_
     res.status(404).json({ error: 'Teacher not found' });
     return;
   }
+  if (!validEmployeeLinks(db, req.institution_id, { branch_id, department_id, designation_id })) {
+    res.status(400).json({ error: 'Branch, department and designation must belong to this school' }); return;
+  }
 
   db.prepare(`
     UPDATE employees SET
@@ -205,7 +216,7 @@ teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_
     date_of_birth = COALESCE(?, date_of_birth), phone = COALESCE(?, phone),
     email = COALESCE(?, email), address = COALESCE(?, address),
     photo = COALESCE(?, photo), department_id = COALESCE(?, department_id),
-    designation_id = COALESCE(?, designation_id), qualification = COALESCE(?, qualification),
+    designation_id = COALESCE(?, designation_id), branch_id = COALESCE(?, branch_id), qualification = COALESCE(?, qualification),
     experience = COALESCE(?, experience), employment_type = COALESCE(?, employment_type),
     basic_salary = COALESCE(?, basic_salary), bank_name = COALESCE(?, bank_name),
     bank_account = COALESCE(?, bank_account), is_active = COALESCE(?, is_active),
@@ -213,9 +224,10 @@ teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_
     WHERE id = ?
   `).run(
     first_name, middle_name, last_name, gender, date_of_birth, phone, email,
-    address, photo, department_id, designation_id, qualification, experience,
+    address, photo, department_id || null, designation_id || null, branch_id || null, qualification, experience,
     employment_type, basic_salary, bank_name, bank_account, is_active, id
   );
+  if (branch_id) db.prepare(`UPDATE users SET branch_id = ? WHERE institution_id = ? AND linked_entity_type = 'employee' AND linked_entity_id = ?`).run(branch_id, req.institution_id, id);
 
   if (photo || first_name || last_name) {
     db.prepare(`
@@ -234,8 +246,8 @@ teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_
 teachersRouter.post('/:id/assignments', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { class_id, section_id, subject_id, session_id, is_class_teacher, class_ids, subject_ids } = req.body;
-  const classes = Array.isArray(class_ids) && class_ids.length ? class_ids : class_id ? [class_id] : [];
-  const subjects = Array.isArray(subject_ids) && subject_ids.length ? subject_ids : subject_id ? [subject_id] : [];
+  const classes = [...new Set(Array.isArray(class_ids) && class_ids.length ? class_ids : class_id ? [class_id] : [])];
+  const subjects = [...new Set(Array.isArray(subject_ids) && subject_ids.length ? subject_ids : subject_id ? [subject_id] : [])];
 
   if (!classes.length || !subjects.length) {
     res.status(400).json({ error: 'Select at least one class and one subject' });
@@ -248,13 +260,37 @@ teachersRouter.post('/:id/assignments', authorize('platform_admin', 'institution
 
   const db = getDatabase();
   const session = session_id || (db.prepare('SELECT id FROM academic_sessions WHERE institution_id = ? AND is_current = 1 LIMIT 1').get(req.institution_id) as any)?.id || null;
+  const teacher = db.prepare('SELECT id FROM employees WHERE id = ? AND institution_id = ? AND is_teacher = 1 AND is_active = 1').get(id, req.institution_id);
+  if (!teacher) { res.status(404).json({ error: 'Active teacher not found in this school' }); return; }
+  if (!session || !db.prepare('SELECT id FROM academic_sessions WHERE id = ? AND institution_id = ?').get(session, req.institution_id)) {
+    res.status(400).json({ error: 'Select a valid academic session for this school' }); return;
+  }
+  if (classes.length > 100 || subjects.length > 100 || [...classes, ...subjects].some(value => typeof value !== 'string')) {
+    res.status(400).json({ error: 'Invalid class or subject selection' }); return;
+  }
+  if (section_id && (classes.length !== 1 || !db.prepare('SELECT id FROM sections WHERE id = ? AND class_id = ? AND institution_id = ?').get(section_id, classes[0], req.institution_id))) {
+    res.status(400).json({ error: 'The section must belong to the selected class and school' }); return;
+  }
+  for (const cid of classes) {
+    if (!db.prepare('SELECT id FROM classes WHERE id = ? AND institution_id = ? AND is_active = 1').get(cid, req.institution_id)) {
+      res.status(400).json({ error: 'A selected class is inactive or belongs to another school' }); return;
+    }
+    for (const sid of subjects) {
+      if (!db.prepare('SELECT id FROM subjects WHERE id = ? AND institution_id = ? AND is_active = 1').get(sid, req.institution_id)) {
+        res.status(400).json({ error: 'A selected subject is inactive or belongs to another school' }); return;
+      }
+      if (!db.prepare('SELECT id FROM class_subjects WHERE institution_id = ? AND class_id = ? AND subject_id = ? AND (session_id = ? OR session_id IS NULL)').get(req.institution_id, cid, sid, session)) {
+        res.status(400).json({ error: 'Map every selected subject to every selected class in this academic session before assigning the teacher' }); return;
+      }
+    }
+  }
   const created: string[] = [];
   try {
     const insert = db.prepare(`
       INSERT INTO teacher_assignments (id, institution_id, employee_id, class_id, section_id, subject_id, session_id, is_class_teacher)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
     `);
-    for (const cid of classes) {
+    const assign = db.transaction(() => { for (const cid of classes) {
       for (const sid of subjects) {
         const existing = db.prepare(`
           SELECT id FROM teacher_assignments
@@ -263,10 +299,11 @@ teachersRouter.post('/:id/assignments', authorize('platform_admin', 'institution
         `).get(id, cid, sid, req.institution_id, section_id || null, session) as any;
         if (existing) continue;
         const assignId = generateId();
-        insert.run(assignId, req.institution_id, id, cid, section_id || null, sid, session, is_class_teacher ? 1 : 0);
-        created.push(assignId);
+        const result = insert.run(assignId, req.institution_id, id, cid, section_id || null, sid, session, is_class_teacher ? 1 : 0);
+        if (result.changes) created.push(assignId);
       }
-    }
+    } });
+    assign();
     res.status(201).json({ ids: created, count: created.length, message: created.length ? 'Assignments created' : 'Those class and subject assignments already exist' });
   } catch (err: any) {
     console.error('Teacher assignment error:', err);
@@ -275,10 +312,10 @@ teachersRouter.post('/:id/assignments', authorize('platform_admin', 'institution
 });
 
 teachersRouter.delete('/:id/assignments/:assignmentId', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
-  const { assignmentId } = req.params;
+  const { id, assignmentId } = req.params;
   const db = getDatabase();
   // TENANT ISOLATION: Verify ownership before delete (null for platform admins)
-  const deleteInstFilter = req.institution_id ? `AND institution_id = '${req.institution_id}'` : '';
-  db.prepare(`DELETE FROM teacher_assignments WHERE id = ? ${deleteInstFilter}`).run(assignmentId);
+  const result = db.prepare('DELETE FROM teacher_assignments WHERE id = ? AND employee_id = ? AND institution_id = ?').run(assignmentId, id, req.institution_id);
+  if (!result.changes) { res.status(404).json({ error: 'Assignment not found for this teacher and school' }); return; }
   res.json({ message: 'Assignment removed successfully' });
 });

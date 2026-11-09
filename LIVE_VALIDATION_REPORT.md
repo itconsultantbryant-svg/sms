@@ -98,6 +98,8 @@ The route scan covers static GET endpoints with appropriate fixture filters plus
 
 ## Important remaining limitations / release gates
 
+**Subsequent iteration:** See `OFFLINE_AND_PRD_IMPLEMENTATION.md` for credential updates, teacher-assignment fixes, scoped offline support, and the current implementation limits. The 352-check run above predates that iteration. Provider send and application backup endpoints now explicitly return unavailable instead of writing false-success records; actual provider/backup integration remains outstanding.
+
 - **Not exhaustive E2E certification:** Every CRUD action, edge case, multi-role combination, branch boundary, cross-school object mutation, and asynchronous failure path still needs acceptance coverage.
 - **Other tenant/action risks remain:** The PRD's route-by-route security audit is not complete. Some operational mutations and report reads have insufficient ownership/role enforcement. Do not expose the system for real-school data merely because the tested probes pass.
 - **Backups:** The existing backup endpoint still records metadata without creating a recoverable artifact. No restore drill was performed. This remains a release blocker.

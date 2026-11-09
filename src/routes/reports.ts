@@ -388,27 +388,7 @@ reportsRouter.post('/custom', authorize('platform_admin'), (req: AuthRequest, re
 });
 
 reportsRouter.post('/backup', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
-  try {
-    const db = getDatabase();
-    const iid = req.institution_id;
-    if (!iid) {
-      res.status(400).json({ error: 'Institution context required' });
-      return;
-    }
-
-    const id = generateId();
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = `backups/backup_${timestamp}.db`;
-
-    db.prepare(
-      `INSERT INTO system_backups (id, institution_id, type, file_path, status, initiated_by)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(id, iid, 'database', backupPath, 'completed', req.user?.id || null);
-
-    res.status(201).json({ id, file_path: backupPath, message: 'Backup created' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  res.status(501).json({ error: 'A recoverable backup service is not configured. No backup has been created. Use a verified database-provider backup/export until backup and restore are implemented.', code: 'BACKUP_SERVICE_REQUIRED' });
 });
 
 reportsRouter.get('/backups', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {

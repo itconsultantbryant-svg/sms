@@ -11,6 +11,8 @@
 
 > This is the initial code-review baseline. Subsequent deployment hardening, live test results, and remaining release limitations are tracked in `HOSTED_DEPLOYMENT.md` and `LIVE_VALIDATION_REPORT.md`; baseline findings below must not be interpreted as all still unchanged or all resolved.
 
+> Later teacher-assignment hardening and the scoped browser offline/synchronization implementation are tracked in `OFFLINE_AND_PRD_IMPLEMENTATION.md`. Offline financial settlement and full standalone desktop/cloud replication are not implied.
+
 ## 1. Executive summary
 
 SVL-SMS is a substantially developed school-management platform with a React web application, an Express API, multi-institution administration, role-specific portals, and an Electron desktop edition. It brings student registration, academic setup, teaching, attendance, assessments, fees, payroll, school operations, communications, and reports into one system.

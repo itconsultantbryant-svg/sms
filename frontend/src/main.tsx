@@ -9,16 +9,23 @@ import { InstitutionProvider } from './contexts/InstitutionContext';
 import { LicenseProvider } from './contexts/LicenseContext';
 import { BrandProvider } from './contexts/BrandContext';
 import './index.css';
+import { startOfflineSupport } from './offline/client';
+
+startOfflineSupport();
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode: 'always',
       retry: 1,
       refetchOnWindowFocus: true,
       refetchInterval: 15000,
     },
   },
 });
+window.addEventListener('afrimind:synchronized', () => { void queryClient.invalidateQueries(); });
+window.addEventListener('svl:user-changed', () => { queryClient.clear(); });
+window.addEventListener('svl:institution-changed', () => { queryClient.clear(); });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

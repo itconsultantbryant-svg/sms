@@ -419,7 +419,7 @@ gradebookRouter.post('/generate', authorize('platform_admin', 'institution_admin
 
 gradebookRouter.put('/:id/columns', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ?`).get(req.params.id) as any;
+  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ? AND institution_id = ?`).get(req.params.id, req.institution_id) as any;
   if (!gb || (req.institution_id && gb.institution_id !== req.institution_id)) {
     res.status(404).json({ error: 'Gradebook not found' });
     return;
@@ -463,7 +463,7 @@ gradebookRouter.put('/:id/columns', authorize('platform_admin', 'institution_adm
 // Teacher bulk enter scores: { entries: [{ student_id, column_id, score }] }
 gradebookRouter.put('/:id/entries', authorize('teacher', 'platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ?`).get(req.params.id) as any;
+  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ? AND institution_id = ?`).get(req.params.id, req.institution_id) as any;
   if (!gb || (req.institution_id && gb.institution_id !== req.institution_id)) {
     res.status(404).json({ error: 'Gradebook not found' });
     return;
@@ -486,6 +486,17 @@ gradebookRouter.put('/:id/entries', authorize('teacher', 'platform_admin', 'inst
   if (!Array.isArray(entries)) {
     res.status(400).json({ error: 'entries[] required' });
     return;
+  }
+
+  const detail = loadGradebookDetail(db, gb.id, req.institution_id);
+  const roster = new Set(detail.students.map((student: any) => student.id));
+  const columns = new Map<string, any>(detail.columns.map((column: any) => [column.id, column]));
+  for (const entry of entries) {
+    const column = columns.get(entry.column_id);
+    const score = entry.score == null ? null : Number(entry.score);
+    if (!roster.has(entry.student_id) || !column || (score != null && (!Number.isFinite(score) || score < 0 || score > Number(column.max_score)))) {
+      res.status(400).json({ error: 'Every score must belong to this class roster and gradebook column, and be within its score range' }); return;
+    }
   }
 
   const upsert = db.prepare(`
@@ -515,7 +526,7 @@ gradebookRouter.put('/:id/entries', authorize('teacher', 'platform_admin', 'inst
 
 gradebookRouter.post('/:id/submit', authorize('teacher', 'platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ?`).get(req.params.id) as any;
+  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ? AND institution_id = ?`).get(req.params.id, req.institution_id) as any;
   if (!gb) {
     res.status(404).json({ error: 'Gradebook not found' });
     return;
@@ -549,7 +560,7 @@ gradebookRouter.post('/:id/submit', authorize('teacher', 'platform_admin', 'inst
 
 gradebookRouter.post('/:id/approve', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ?`).get(req.params.id) as any;
+  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ? AND institution_id = ?`).get(req.params.id, req.institution_id) as any;
   if (!gb || gb.status !== 'submitted') {
     res.status(404).json({ error: 'Submitted gradebook not found' });
     return;
@@ -566,7 +577,7 @@ gradebookRouter.post('/:id/approve', authorize('platform_admin', 'institution_ad
 
 gradebookRouter.post('/:id/reject', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ?`).get(req.params.id) as any;
+  const gb = db.prepare(`SELECT * FROM gradebooks WHERE id = ? AND institution_id = ?`).get(req.params.id, req.institution_id) as any;
   if (!gb || gb.status !== 'submitted') {
     res.status(404).json({ error: 'Submitted gradebook not found' });
     return;

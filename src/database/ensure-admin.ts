@@ -2,8 +2,8 @@ import { getDatabase } from './init';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
-const SUPERADMIN_USERNAME = process.env.BOOTSTRAP_ADMIN_USERNAME || 'superadmin';
-const SUPERADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@softwarevala.com';
+const SUPERADMIN_USERNAME = process.env.BOOTSTRAP_ADMIN_USERNAME || 'admin@afrimind.com';
+const SUPERADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@afrimind.com';
 
 /**
  * One-time administrator bootstrap. Never reset an existing account on startup.
