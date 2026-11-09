@@ -33,6 +33,31 @@ Date: November 9, 2026. Product: `sms` / SVL-SMS. Company: **AfriMind Tech & AI 
 
 ## Validation method and results
 
+### Final AfriMind run — completed
+
+**352 passed, 0 failed**, completed November 9, 2026 at 20:16:39 UTC against the isolated branded preview:
+
+`https://sms-8ht2elyam-itconsultantbryant-svgs-projects.vercel.app`
+
+| Check category | Passed | Failed |
+|---|---:|---:|
+| Selected business workflows and fixture provisioning | 11 | 0 |
+| Security/authorization probes | 6 | 0 |
+| Static API read smoke checks | 107 | 0 |
+| UI logins, dashboards and role-visible/registered page visits | 227 | 0 |
+| Automatic cross-session UI refresh | 1 | 0 |
+| **Total** | **352** | **0** |
+
+All 14 role fixtures completed UI login/dashboard and their tested navigation: platform admin, institution admin, teacher, student, parent, accountant, registrar, staff, principal, HR manager, librarian, receptionist, transport manager and branch admin.
+
+Attendance, fee balance and approved grade changes were verified through separate user sessions. The student attendance page also displayed an administrator's new remark without a manual reload; that entire browser/update check completed in approximately 19.5 seconds. This verifies polling-based freshness, not WebSocket push.
+
+The final run also passed library issue/return reconciliation, inventory purchase/issue quantities, visitor checkout, certificate generation, lesson-plan delivery/seen acknowledgement and assignment submission/teacher visibility. Tested permission probes rejected unauthorized student creation, payroll access, self-confirmed payment, mismatched payment currency, arbitrary institution-admin SQL, and cross-school student detail access.
+
+Credential-free detailed results remain at ignored `test-results/afrimind/system.json`; the committed summary is `validation/afrimind-system-summary.json`. The separate fixture file contains credentials and must remain private. Earlier failed/outage-interrupted runs below are retained as history, not mixed into the final pass count.
+
+**The automated suite's defined scope passed. Outstanding release gates and untested operations below still apply; this is not an exhaustive certification of every component/action.**
+
 ### Local and build validation
 
 - Backend/frontend TypeScript: passed after fixes.
@@ -61,7 +86,7 @@ Failures were investigated rather than treated as acceptable:
 - Second pass: **214 passed, 4 failed**, interrupted by `ERR_INTERNET_DISCONNECTED`. The repaired permission probes and PostgreSQL report queries passed before the outage. Later browser-role coverage was incomplete.
 - Expanded pass: **111 passed, 15 failed**, also interrupted by lost connectivity. The six added library, inventory, reception, certificate, lesson-plan and assignment workflows passed. Later fetch/browser failures were recorded, not counted as successful tests.
 
-See the final result summary appended below and credential-free JSON produced by the runner. Fixture credentials are in a separate ignored `fixtures.local.json` and must not be published. An outage-interrupted pass is not a full-system success.
+See the final result summary above and credential-free JSON produced by the runner. Fixture credentials are in a separate ignored `fixtures.local.json` and must not be published. An outage-interrupted pass is not a full-system success.
 
 ## Coverage interpretation
 

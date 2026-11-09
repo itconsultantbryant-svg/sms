@@ -1,0 +1,32 @@
+{
+  "company": "AfriMind Tech & AI Consulting Agency (AfriMind)",
+  "completedAt": "2026-11-09T20:16:39.561Z",
+  "testedPreview": "https://sms-8ht2elyam-itconsultantbryant-svgs-projects.vercel.app",
+  "syntheticDataOnly": true,
+  "passed": 352,
+  "failed": 0,
+  "categories": {
+    "workflow": { "passed": 11, "failed": 0 },
+    "security": { "passed": 6, "failed": 0 },
+    "api-smoke": { "passed": 107, "failed": 0 },
+    "browser": { "passed": 227, "failed": 0 },
+    "cross-session-ui": { "passed": 1, "failed": 0 }
+  },
+  "roles": [
+    "platform", "admin", "teacher", "student", "parent", "accountant",
+    "registrar", "staff", "principal", "hr_manager", "librarian",
+    "receptionist", "transport_manager", "branch_admin"
+  ],
+  "automaticAttendanceRefreshCheck": {
+    "passed": true,
+    "durationMs": 19537,
+    "transport": "HTTP polling, not WebSocket push"
+  },
+  "localRegressionTests": { "passed": 9, "failed": 0 },
+  "typechecksPassed": true,
+  "productionSmokePassed": true,
+  "productionDeploymentProtected": true,
+  "releaseApproved": false,
+  "scope": "Selected live workflows, security probes, static API reads and role-visible browser navigation. Not exhaustive acceptance of all operations.",
+  "remainingReleaseGates": "See LIVE_VALIDATION_REPORT.md and PRODUCT_REQUIREMENTS_DOCUMENT.md"
+}
