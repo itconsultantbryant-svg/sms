@@ -28,7 +28,7 @@ async function ensureClient() {
   if (client) return client;
   client = new Client({
     connectionString: workerData.connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: { rejectUnauthorized: true },
     connectionTimeoutMillis: 15000,
     statement_timeout: 20000,
     query_timeout: 20000,
@@ -291,6 +291,7 @@ class NeonDatabase {
     if (remaining.length) {
       console.error(`Neon schema: ${remaining.length} statement(s) still failing`);
       remaining.slice(0, 12).forEach((item) => console.error('-', item.error, '\n ', item.sql));
+      throw new Error(`Database schema initialization failed (${remaining.length} statements)`);
     }
     return this;
   }

@@ -367,7 +367,7 @@ reportsRouter.get('/academic', (req: AuthRequest, res: Response) => {
   }
 });
 
-reportsRouter.post('/custom', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
+reportsRouter.post('/custom', authorize('platform_admin'), (req: AuthRequest, res: Response) => {
   try {
     const { query, parameters } = req.body;
     if (!query) {

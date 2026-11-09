@@ -1,3 +1,4 @@
+import './config/environment';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -66,19 +67,14 @@ app.use(cors({
     if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
-      // Allow known Vercel/Render preview hosts for this product family
-      const isTrustedHost =
-        /\.vercel\.app$/i.test(origin) ||
-        /\.onrender\.com$/i.test(origin) ||
-        /^https:\/\/([a-z0-9-]+\.)*softwarevalalib\.app$/i.test(origin) ||
-        origin.startsWith('http://localhost:');
+      const deploymentHosts = [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+        .filter(Boolean).map(host => `https://${host}`);
+      const isTrustedHost = deploymentHosts.includes(origin);
       if (isTrustedHost) {
         callback(null, true);
         return;
       }
-      console.log('CORS blocked origin:', origin);
-      console.log('Allowed origins:', allowedOrigins);
-      callback(null, true); // Prefer availability; credentials still work with reflected origin
+      callback(new Error('Origin not allowed'));
     }
   },
   credentials: true,
@@ -92,7 +88,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint (no auth required)
 app.get('/api/health', (req, res) => {
-  let database = databaseDriver();
+  let database: string = databaseDriver();
   let institutions = 0;
   try {
     const row = getHealthCount();
@@ -101,8 +97,8 @@ app.get('/api/health', (req, res) => {
     database = `${database}:error`;
     console.error('Health database check failed:', err.message || err);
   }
-  res.json({
-    status: 'ok',
+  res.status(database.includes(':error') ? 503 : 200).json({
+    status: database.includes(':error') ? 'unavailable' : 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
@@ -165,8 +161,11 @@ app.use('/api/notifications', authenticate, notificationsRouter);
 app.use(errorHandler);
 
 // Initialize database and ensure developer superadmin exists
-initializeDatabase();
-ensureAdminUser();
+// Run migrations explicitly before serverless deployment, not on every cold start.
+if (!process.env.VERCEL) {
+  initializeDatabase();
+  ensureAdminUser();
+}
 
 // Start server. Inside Electron (packaged build), electron/main.ts imports this
 // module and calls app.listen() itself so the backend runs IN the Electron main

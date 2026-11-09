@@ -6,22 +6,16 @@ import {
 } from './licensing';
 
 // ISSUER — SERVER ONLY. Private key never bundled into the desktop app.
-const DEV_PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEICq2lZK7RCz81adFNK0OZpPS2VTSlIB9vmKp+0tP27bO
------END PRIVATE KEY-----
-`;
-
 function getPrivateKey(): crypto.KeyObject {
   const envKey = process.env.LICENSE_PRIVATE_KEY;
   if (envKey && envKey.trim().length > 0) {
     try {
       return crypto.createPrivateKey(envKey.trim());
     } catch {
-      console.warn('[licensing] LICENSE_PRIVATE_KEY invalid — using DEV key.');
+      throw new Error('LICENSE_PRIVATE_KEY is invalid');
     }
   }
-  console.warn('[licensing] LICENSE_PRIVATE_KEY not set — using DEV keypair.');
-  return crypto.createPrivateKey(DEV_PRIVATE_KEY_PEM);
+  throw new Error('LICENSE_PRIVATE_KEY is required to issue licenses');
 }
 
 export interface IssueLicenseInput { planTier: string; expiryDays: number; }
@@ -40,8 +34,8 @@ export function issueLicenseKey(input: IssueLicenseInput): IssuedLicense {
   payload[3] = (expiryDays >>> 16) & 0xff;
   payload[4] = (expiryDays >>> 24) & 0xff;
   payload[5] = tierCode;
-  const signature = crypto.sign(null, payload, getPrivateKey());
-  const raw = Buffer.concat([payload, signature]);
+  const signature = crypto.sign(null, Uint8Array.from(payload), getPrivateKey());
+  const raw = Buffer.concat([Uint8Array.from(payload), Uint8Array.from(signature)]);
   const b32 = base32Encode(raw);
   const groups: string[] = [];
   for (let i = 0; i < b32.length; i += 4) groups.push(b32.slice(i, i + 4));

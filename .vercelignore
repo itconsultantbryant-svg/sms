@@ -1,0 +1,16 @@
+.git
+.env*
+!.env.example
+frontend/.env*
+!frontend/.env.example
+node_modules
+frontend/node_modules
+backend
+backend-backup
+data
+out
+dist
+frontend/dist
+test-results
+playwright-report
+tools/licenses

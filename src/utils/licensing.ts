@@ -45,7 +45,7 @@ const CODE_BY_PLAN: Record<string, number> = {
 
 function getPublicKey(): crypto.KeyObject {
   return crypto.createPublicKey({
-    key: Buffer.from(LICENSE_PUBLIC_KEY_B64, 'base64'),
+    key: Buffer.from(process.env.LICENSE_PUBLIC_KEY_B64 || LICENSE_PUBLIC_KEY_B64, 'base64'),
     format: 'der',
     type: 'spki',
   });
@@ -139,7 +139,7 @@ export function validateLicenseKey(key: string): LicenseValidation {
 
   let signatureOk = false;
   try {
-    signatureOk = crypto.verify(null, payload, getPublicKey(), signature);
+    signatureOk = crypto.verify(null, Uint8Array.from(payload), getPublicKey(), Uint8Array.from(signature));
   } catch {
     signatureOk = false;
   }

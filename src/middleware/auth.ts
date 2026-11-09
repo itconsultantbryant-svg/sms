@@ -3,9 +3,9 @@ import jwt from 'jsonwebtoken';
 import { getDatabase } from '../database/init';
 import { isExpired, getDaysRemaining } from '../utils/licensing';
 import { getMergedAccessForUser, userHasAnyPermission } from '../utils/userAccess';
+import { JWT_SECRET } from '../config/environment';
 
 // CRITICAL: Must match the secret in routes/auth.ts!
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -37,10 +37,6 @@ export interface AuthRequest extends Request {
 export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
-  console.log('🔐 Authenticate middleware:', {
-    hasAuth: !!authHeader,
-    authPreview: authHeader?.substring(0, 30) + '...'
-  });
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('❌ No auth header or invalid format');

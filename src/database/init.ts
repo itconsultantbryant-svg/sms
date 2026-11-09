@@ -76,9 +76,9 @@ export function initializeDatabase(): void {
 
   if (!existing) {
     database.exec(schemaV2Consolidated);
-    database.exec(homeworkAssignmentsSchema);
-    database.exec(gradebookLessonPermsSchema);
   }
+  database.exec(homeworkAssignmentsSchema);
+  database.exec(gradebookLessonPermsSchema);
   ensureTenantColumns(database);
   migrateInstitutionBranding(database);
   migrateSchoolEnhancements();

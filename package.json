@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "SVL School Management System - Desktop & Web",
   "main": "dist/electron/main.js",
-  "homepage": "https://github.com/itconsultantbryant-svg/svl_sms",
+  "homepage": "https://github.com/itconsultantbryant-svg/sms",
   "author": "SVL-SMS Team",
   "license": "Proprietary",
   "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project frontend/tsconfig.json",
+    "test": "tsx --test tests/*.test.ts",
+    "test:e2e": "node scripts/e2e-system.mjs",
+    "db:initialize": "tsx scripts/initialize-database.ts",
     "dev": "tsx watch src/index.ts",
     "build": "npm run build:frontend && npm run build:backend",
     "start": "node dist/index.js",
@@ -48,6 +52,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
+    "@playwright/test": "^1.65.0",
     "archiver": "^7.0.1",
     "concurrently": "^8.2.2",
     "electron": "^30.0.0",

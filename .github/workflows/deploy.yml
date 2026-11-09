@@ -1,229 +1,39 @@
-name: Deploy to Render
+name: Validate hosted application
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
-env:
-  RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-  RENDER_SERVICE_ID_BACKEND: ${{ secrets.RENDER_SERVICE_ID_BACKEND }}
-  RENDER_SERVICE_ID_FRONTEND: ${{ secrets.RENDER_SERVICE_ID_FRONTEND }}
+permissions:
+  contents: read
 
 jobs:
-  test:
-    name: Test
+  validate:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch'
-
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Check TypeScript compilation
-        run: npm run build
-
-      - name: Lint and verify code
-        run: |
-          echo "Code quality checks passed"
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Build backend
-        run: |
-          npm install
-          npm run build
-
-      - name: Build frontend
-        run: |
-          cd frontend
-          npm install
-          npm run build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: |
-            dist/
-            frontend/dist/
-          retention-days: 1
-
-  security-check:
-    name: Security Check
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Check for hardcoded secrets
-        run: |
-          if grep -r "JWT_SECRET\|LICENSE_PRIVATE_KEY\|changeme" src/ frontend/src/ --exclude-dir=node_modules | grep -v "\.env\|example\|EXAMPLE"; then
-            echo "ERROR: Potential hardcoded secrets found"
-            exit 1
-          fi
-
-      - name: Verify environment variables
-        run: |
-          required_vars=("NODE_ENV" "PORT" "JWT_SECRET" "LICENSE_PRIVATE_KEY" "CORS_ORIGINS")
-          for var in "${required_vars[@]}"; do
-            if grep -q "$var=" .env.example; then
-              echo "✓ $var is documented in .env.example"
-            fi
-          done
-
-  deploy:
-    name: Deploy to Render
-    runs-on: ubuntu-latest
-    needs: [test, build, security-check]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy Backend Service
-        if: env.RENDER_API_KEY != ''
-        run: |
-          # Trigger Render deployment using API
-          curl -X POST https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_BACKEND }}/deploys \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"clearCache": "clear_all"}'
-
-          echo "Backend deployment triggered"
-
-      - name: Deploy Frontend Service
-        if: env.RENDER_API_KEY != ''
-        run: |
-          # Trigger Render deployment using API
-          curl -X POST https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID_FRONTEND }}/deploys \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"clearCache": "clear_all"}'
-
-          echo "Frontend deployment triggered"
-
-      - name: Wait for deployment
-        run: |
-          echo "Waiting for deployment to complete..."
-          sleep 30
-
-  health-check:
-    name: Health Check
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Wait for services to be ready
-        run: |
-          echo "Waiting 60 seconds for services to start..."
-          sleep 60
-
-      - name: Check backend health
-        run: |
-          max_attempts=10
-          attempt=0
-
-          while [ $attempt -lt $max_attempts ]; do
-            response=$(curl -s -o /dev/null -w "%{http_code}" https://svl-sms-backend.onrender.com/api/health || echo "000")
-
-            if [ "$response" = "200" ]; then
-              echo "✓ Backend is healthy"
-              exit 0
-            fi
-
-            echo "Health check attempt $((attempt + 1))/$max_attempts failed (HTTP $response)"
-            attempt=$((attempt + 1))
-            sleep 10
-          done
-
-          echo "✗ Backend health check failed"
-          exit 1
-
-      - name: Check frontend health
-        run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" https://svl-sms-frontend.onrender.com/ || echo "000")
-
-          if [ "$response" = "200" ] || [ "$response" = "301" ]; then
-            echo "✓ Frontend is responding"
-          else
-            echo "✗ Frontend returned HTTP $response"
-            exit 1
-          fi
-
-      - name: Verify API connectivity
-        run: |
-          echo "Testing API connectivity..."
-
-          # Test basic endpoint
-          response=$(curl -s -X GET https://svl-sms-backend.onrender.com/api/health | jq -r '.status // "unknown"' 2>/dev/null || echo "error")
-
-          if [ "$response" = "ok" ] || [ "$response" = "healthy" ]; then
-            echo "✓ API is responding correctly"
-          else
-            echo "⚠ API response: $response"
-          fi
-
-  notify-success:
-    name: Notify Success
-    runs-on: ubuntu-latest
-    needs: health-check
-    if: success() && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Create deployment summary
-        run: |
-          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backend**: https://svl-sms-backend.onrender.com" >> $GITHUB_STEP_SUMMARY
-          echo "- **Frontend**: https://svl-sms-frontend.onrender.com" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Author**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-
-  notify-failure:
-    name: Notify Failure
-    runs-on: ubuntu-latest
-    if: failure() && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Create failure summary
-        run: |
-          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Please check the logs for details:" >> $GITHUB_STEP_SUMMARY
-          echo "- Job: ${{ github.job }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+      - run: npm ci --legacy-peer-deps
+        working-directory: frontend
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:backend
+      - run: npm run build
+        working-directory: frontend
+      - name: Report dependency advisories
+        run: npm audit --omit=dev
+        continue-on-error: true
+      # Vercel's Git integration builds the same root vercel.json. No legacy
+      # Render services or databases are mutated by this workflow.

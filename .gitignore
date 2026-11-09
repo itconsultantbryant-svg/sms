@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 
 # Environment variables
@@ -78,3 +77,10 @@ release/
 
 # Misc
 .cache/
+.vercel/
+.neon/
+.env.deployment.local
+playwright-report/
+test-results/
+.vercel
+.env*.local

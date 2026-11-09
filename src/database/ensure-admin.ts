@@ -2,13 +2,11 @@ import { getDatabase } from './init';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
-const SUPERADMIN_USERNAME = 'superadmin';
-const SUPERADMIN_PASSWORD = 'SuperAdmin2024!';
-const SUPERADMIN_EMAIL = 'admin@softwarevala.com';
+const SUPERADMIN_USERNAME = process.env.BOOTSTRAP_ADMIN_USERNAME || 'superadmin';
+const SUPERADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@softwarevala.com';
 
 /**
- * Ensure the developer platform superadmin exists with full access.
- * Idempotent: creates or updates password/role on every boot.
+ * One-time administrator bootstrap. Never reset an existing account on startup.
  */
 export function ensureAdminUser() {
   const db = getDatabase();
@@ -32,29 +30,20 @@ export function ensureAdminUser() {
       console.log('✓ Created platform_admin role');
     }
 
-    const hashedPassword = bcrypt.hashSync(SUPERADMIN_PASSWORD, 10);
     const existing = db
       .prepare('SELECT id, username FROM users WHERE username = ?')
       .get(SUPERADMIN_USERNAME) as any;
 
     if (existing) {
-      db.prepare(`
-        UPDATE users
-        SET password_hash = ?,
-            email = ?,
-            first_name = 'Platform',
-            last_name = 'Superadmin',
-            role_id = ?,
-            user_type = 'platform_admin',
-            institution_id = NULL,
-            is_active = 1,
-            updated_at = datetime('now')
-        WHERE id = ?
-      `).run(hashedPassword, SUPERADMIN_EMAIL, platformAdminRole.id, existing.id);
-      console.log('✓ Superadmin ensured');
-      console.log(`  Username: ${SUPERADMIN_USERNAME}`);
+      if (process.env.ELECTRON_MODE === 'true') ensureOfflineInstitution();
       return;
     }
+
+    const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+    if (!password || password.length < 16) {
+      throw new Error('Set BOOTSTRAP_ADMIN_PASSWORD (at least 16 characters) for first-time setup');
+    }
+    const hashedPassword = bcrypt.hashSync(password, 12);
 
     const userId = uuidv4();
     db.prepare(`
@@ -66,7 +55,6 @@ export function ensureAdminUser() {
 
     console.log('✓ Superadmin user created');
     console.log(`  Username: ${SUPERADMIN_USERNAME}`);
-    console.log('  Password: SuperAdmin2024!');
 
     // On the desktop/offline build, seed a default institution and a school
     // admin so the freshly installed app is usable without a cloud connection.
@@ -76,6 +64,7 @@ export function ensureAdminUser() {
     }
   } catch (error) {
     console.error('Error ensuring superadmin user:', error);
+    throw error;
   }
 }
 
@@ -131,7 +120,9 @@ function ensureOfflineInstitution() {
     if (!existingAdmin) {
       const { v4: uuidv4 } = require('uuid');
       const userId = uuidv4();
-      const hashedPassword = bcrypt.hashSync('SchoolAdmin2024!', 10);
+      const password = process.env.BOOTSTRAP_SCHOOL_PASSWORD;
+      if (!password || password.length < 16) throw new Error('Set BOOTSTRAP_SCHOOL_PASSWORD for offline setup');
+      const hashedPassword = bcrypt.hashSync(password, 12);
       db.prepare(
         `
         INSERT INTO users
@@ -141,7 +132,6 @@ function ensureOfflineInstitution() {
       ).run(userId, instId, hashedPassword, adminRole.id);
       console.log('✓ Offline school admin created');
       console.log('  Username: schooladmin');
-      console.log('  Password: SchoolAdmin2024!');
     }
   } catch (error) {
     console.error('Error ensuring offline institution:', error);

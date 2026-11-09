@@ -1,4 +1,8 @@
-# SVL School Management System (SVL-SMS)
+# sms — SVL School Management System
+
+Canonical repository: https://github.com/itconsultantbryant-svg/sms
+
+See [PRODUCT_REQUIREMENTS_DOCUMENT.md](PRODUCT_REQUIREMENTS_DOCUMENT.md) for the reviewed product baseline and [HOSTED_DEPLOYMENT.md](HOSTED_DEPLOYMENT.md) for the Vercel + Neon setup.
 
 A comprehensive web-based School Management System built for Softwarevala Liberia.
 

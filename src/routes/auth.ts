@@ -5,10 +5,10 @@ import { getDatabase } from '../database/init';
 import { getMergedAccessForUser } from '../utils/userAccess';
 import { generateId } from '../utils/helpers';
 import { authenticate, AuthRequest, authorize } from '../middleware/auth';
+import { JWT_SECRET } from '../config/environment';
 
 export const authRouter = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
 function mapUserResponse(user: any) {
   const access = getMergedAccessForUser(user.id, user.role_id);
