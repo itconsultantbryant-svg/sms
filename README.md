@@ -1,92 +1,71 @@
 # sms — SVL School Management System
 
-Canonical repository: https://github.com/itconsultantbryant-svg/sms
+School management software by **AfriMind Tech & AI Consulting Agency (AfriMind)**.
 
-See [PRODUCT_REQUIREMENTS_DOCUMENT.md](PRODUCT_REQUIREMENTS_DOCUMENT.md) for the reviewed product baseline and [HOSTED_DEPLOYMENT.md](HOSTED_DEPLOYMENT.md) for the Vercel + Neon setup.
+Repository: https://github.com/itconsultantbryant-svg/sms
 
-A comprehensive web-based School Management System by **AfriMind Tech & AI Consulting Agency (AfriMind)**.
+## Hosted architecture
 
-## Repository Structure
-
-```
-svl_sms/
-├── src/              # Backend source code (at root for Render)
-│   ├── routes/       # API routes
-│   ├── database/     # Database schema & initialization
-│   ├── middleware/   # Auth & tenant middleware
-│   └── utils/        # Helper functions
-├── data/             # SQLite database
-├── frontend/         # React frontend (separate Vercel deployment)
-├── package.json      # Backend dependencies (root)
-├── tsconfig.json     # TypeScript config (root)
-└── render.yaml       # Render deployment config
+```text
+Browser → Vercel React frontend → same-origin /api Express functions → Neon PostgreSQL
 ```
 
-## Backend Deployment (Render)
+Neon hosts the database; Vercel runs both the frontend and the backend API. Separate Neon branches and Vercel variables isolate production, preview, and development. The Electron edition uses a local API and SQLite; cloud/desktop synchronization is not implemented.
 
-The backend is at the root level for easy Render deployment:
+- Node.js 24, TypeScript, Express, PostgreSQL/SQLite, bcrypt and JWT.
+- React 18, Vite, Tailwind CSS, React Router and TanStack Query.
+- Multi-institution administration, role dashboards, admissions/student records, attendance, teaching, gradebooks/results, fees, payroll, school operations and reporting.
+- Live UI freshness is polling-based (normally 15 seconds), not WebSocket push.
 
-```bash
-# Render will run:
-npm install
-npm run build
-npm start
-```
+## Documentation and release status
 
-## Frontend Deployment (Vercel)
+- [Product requirements](PRODUCT_REQUIREMENTS_DOCUMENT.md): reviewed baseline, target workflows and acceptance criteria.
+- [Deployment guide](HOSTED_DEPLOYMENT.md): provisioned resources, environment configuration, initialization and test commands.
+- [Live validation report](LIVE_VALIDATION_REPORT.md): evidence, failures, fixes, coverage limits and remaining release blockers.
 
-The frontend is in the `frontend/` directory and deploys separately to Vercel.
-
-See DEPLOYMENT.md for detailed instructions.
-
-## Technology Stack
-
-### Backend (Root Level)
-- Node.js 18+
-- Express.js
-- SQLite (better-sqlite3)
-- JWT Authentication
-- TypeScript
-
-### Frontend (frontend/ directory)
-- React 18
-- Vite
-- Tailwind CSS
-- TypeScript
+Hosted alias: **https://sms-alpha-one.vercel.app**. Vercel authentication remains enabled for all deployments while security, recovery and other release gates are outstanding. A successful build/page crawl does not certify all business workflows or production readiness.
 
 ## Development
 
-### Backend
 ```bash
-npm install
-npm run dev
+npm ci
+npm --prefix frontend ci --legacy-peer-deps
 ```
 
-### Frontend
+With the generated, ignored `.env.development.local` file available:
+
 ```bash
-cd frontend
-npm install
-npm run dev
+npm run dev:cloud
 ```
 
-## Environment Variables
+This starts the local API on port 3001 against the new Neon development branch and the frontend on port 5173. It does not overwrite existing workspace `.env` files. For separate/custom local setups, `npm run dev` and `npm --prefix frontend run dev` remain available; configure their environment deliberately.
 
-Backend (.env):
-```
-NODE_ENV=development
-PORT=3001
-JWT_SECRET=your-secret-key
-CORS_ORIGINS=http://localhost:3000
-```
+## Validation
 
-Frontend (frontend/.env):
-```
-VITE_API_URL=http://localhost:3001/api
+```bash
+npm run typecheck
+npm test
+npm run build:backend
+npm --prefix frontend run build
 ```
 
-## Deployment
+The opt-in live runner, `scripts/e2e-system.mjs`, creates synthetic records and must only target an isolated test deployment. See the deployment guide for required flags and browser setup.
 
-1. **Backend to Render**: Push to GitHub, Render auto-deploys from root
-2. **Frontend to Vercel**: Deploy from `frontend/` directory
+## Database setup and secrets
 
-See DEPLOYMENT.md for complete guide.
+Run `scripts/initialize-database.ts` explicitly with the intended environment before a hosted deployment. Vercel requests do not run migrations or bootstrap accounts. First-time setup requires a strong `BOOTSTRAP_ADMIN_PASSWORD`; existing passwords are never reset on startup.
+
+`DATABASE_URL`, `JWT_SECRET`, and license private keys are server-only. Never prefix secrets with `VITE_`, commit local environment files, publish test fixture credentials, or reuse historical default credentials. The browser uses the public `/api` URL only.
+
+## Source layout
+
+| Path | Purpose |
+|---|---|
+| `src/` | Active Express API, middleware, schemas and database adapter |
+| `frontend/src/` | Active React application |
+| `api/index.ts`, `vercel.json` | Hosted function entry and routing |
+| `electron/` | Local desktop runtime and bridge |
+| `scripts/`, `tests/` | Initialization, packaging and validation |
+| `PRODUCT_REQUIREMENTS_DOCUMENT.md` | Product baseline and release requirements |
+
+Historical backups/build output are not authoritative source. Legacy domain/contact identifiers remain unchanged until replacement ownership details are supplied; school-specific branding is not overwritten by the AfriMind company rename.

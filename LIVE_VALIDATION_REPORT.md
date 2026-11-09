@@ -38,7 +38,12 @@ Date: November 9, 2026. Product: `sms` / SVL-SMS. Company: **AfriMind Tech & AI 
 - Backend/frontend TypeScript: passed after fixes.
 - Automated unit/regression tests include teacher assignment combinations/session deduplication, signed-key verification/tamper rejection/no fallback, student mutation authorization, payroll read authorization, portal payment authorization, one-time/no-reset administrator bootstrap, and consistent AfriMind branding. See final counts below.
 - Frontend and API builds: completed locally and in Vercel.
+- Current local unit/regression count: **9 passed, 0 failed**; backend and frontend type checks pass.
 - Live database initialization: completed for all three new Neon environments.
+- New development API smoke check: HTTP 200, `database: neon`, `status: ok`.
+- Branded preview login at 390px and 1440px: approved full/short company names and title present; no horizontal viewport overflow.
+- Deployed preview entry JavaScript/CSS check: no configured database URL, JWT secret, issuer private-key value or bootstrap password found in the two entry assets scanned. This is a targeted check, not a complete security audit.
+- AfriMind production deployment `sms-1l10ofjp2-itconsultantbryant-svgs-projects.vercel.app`: completed. Alias `sms-alpha-one.vercel.app` returned healthy Neon status, required deployment authentication (302 without it), and passed a real administrator UI login/platform-dashboard/AfriMind-sidebar smoke check. Production still contained zero schools; no synthetic school writes were performed there.
 - Browser runner: macOS 12 required a test-only compatible Playwright 1.48.2 / Chromium 130 installation. The application's target browser support is not certified by this workaround.
 
 ### First full live pass
