@@ -367,6 +367,7 @@ export default function DynamicSidebar({ open, onClose }: SidebarProps) {
     const q = search.trim().toLowerCase();
     return navigation
       .filter(shouldShowItem)
+      .filter((item, index, items) => items.findIndex(other => other.name === item.name && other.href === item.href) === index)
       .map((item) => {
         if (!item.children) return item;
         const children = item.children.filter((child) => hasPermission(child.permission));

@@ -37,6 +37,7 @@ function ensureLeaveTypes(db: ReturnType<typeof getDatabase>, institutionId: str
 // Apply tenant middleware to ALL routes
 payrollRouter.use(injectTenant);
 payrollRouter.use(requireTenant);
+payrollRouter.use(authorize(...PAYROLL_ROLES));
 
 payrollRouter.get('/employees', (req: AuthRequest, res: Response) => {
   const institutionId = schoolId(req, res);

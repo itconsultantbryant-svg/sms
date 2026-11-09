@@ -311,7 +311,7 @@ reportsRouter.get('/attendance', (req: AuthRequest, res: Response) => {
          LEFT JOIN student_attendance sa ON sa.student_id = s.id
          LEFT JOIN attendance_sessions a ON sa.attendance_session_id = a.id
          WHERE s.institution_id = ? AND s.status = 'active' ${sessionFilter}
-         GROUP BY s.id
+         GROUP BY s.id, s.admission_number, s.first_name, s.last_name, c.name, c.sort_order
          ORDER BY c.sort_order, s.first_name`
       )
       .all(...params);

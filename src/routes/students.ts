@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDatabase } from '../database/init';
-import { AuthRequest, authorize } from '../middleware/auth';
+import { AuthRequest, authorize, requirePermission } from '../middleware/auth';
 import { deleteSchoolRecord } from '../utils/purgeRecords';
 import { injectTenant, requireTenant } from '../middleware/tenant';
 import { generateId, generateAdmissionNumber, generateDefaultPassword, paginate, buildSearchQuery } from '../utils/helpers';
@@ -190,7 +190,7 @@ function emptyToNull(value: any) {
   return value;
 }
 
-studentsRouter.post('/', (req: AuthRequest, res: Response) => {
+studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest, res: Response) => {
   const {
     first_name, middle_name, last_name, date_of_birth, gender, nationality,
     county, address, phone, email, photo, blood_group, medical_info,
@@ -430,7 +430,7 @@ studentsRouter.post('/', (req: AuthRequest, res: Response) => {
   });
 });
 
-studentsRouter.put('/:id', (req: AuthRequest, res: Response) => {
+studentsRouter.put('/:id', requirePermission('students.edit'), (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const {
     first_name, middle_name, last_name, date_of_birth, gender, nationality,

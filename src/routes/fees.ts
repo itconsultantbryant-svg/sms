@@ -268,7 +268,7 @@ feesRouter.get('/payments', (req: AuthRequest, res: Response) => {
   res.json({ data: payments, total: total.count, page: parseInt(page), limit: lim });
 });
 
-feesRouter.post('/payments', (req: AuthRequest, res: Response) => {
+feesRouter.post('/payments', authorize('platform_admin', 'institution_admin', 'accountant', 'finance_officer', 'finance'), (req: AuthRequest, res: Response) => {
   const { invoice_id, amount, payment_method, payment_date, reference_number, notes, currency_code } = req.body;
   if (!invoice_id || !amount || !payment_date) {
     res.status(400).json({ error: 'Invoice, amount, and payment date are required' });
@@ -300,6 +300,10 @@ feesRouter.post('/payments', (req: AuthRequest, res: Response) => {
   const paymentNumber = `PAY-${Date.now().toString(36).toUpperCase()}`;
   const method = normalizePaymentMethod(payment_method);
   const currency = String(currency_code || invoice.currency_code || 'USD').toUpperCase() === 'LRD' ? 'LRD' : 'USD';
+  if (currency !== String(invoice.currency_code || 'USD').toUpperCase()) {
+    res.status(400).json({ error: 'Payment currency must match the invoice currency; currency conversion is not supported' });
+    return;
+  }
 
   const transaction = db.transaction(() => {
     db.prepare(`
@@ -405,14 +409,14 @@ feesRouter.get('/due', (req: AuthRequest, res: Response) => {
 
   const dues = db.prepare(`
     SELECT s.id as student_id, s.admission_number, s.first_name, s.last_name,
-           c.name as class_name, sec.name as section_name,
+           c.name as class_name, sec.name as section_name, i.currency_code,
            SUM(i.balance) as total_due, COUNT(i.id) as invoice_count
     FROM invoices i
     JOIN students s ON i.student_id = s.id
     LEFT JOIN classes c ON s.class_id = c.id
     LEFT JOIN sections sec ON s.section_id = sec.id
     ${where}
-    GROUP BY s.id
+    GROUP BY s.id, s.admission_number, s.first_name, s.last_name, c.name, sec.name, i.currency_code
     ORDER BY total_due DESC
   `).all(...params);
 

@@ -66,6 +66,7 @@ async function seed() {
   const term = await request(admin, '/academics/terms', 'POST', { session_id: session.id, name: 'E2E Term', start_date: '2026-09-01', end_date: '2027-01-31' }, 201);
   const classRecord = await request(admin, '/academics/classes', 'POST', { name: 'E2E Grade 1', branch_id: branches[0].id, capacity: 30, sort_order: 1 }, 201);
   const subject = await request(admin, '/academics/subjects', 'POST', { name: 'E2E Mathematics', code: `MATH-${run}` }, 201);
+  const exam = await request(admin, '/examinations/exams', 'POST', { name: 'E2E Exam', session_id: session.id, term_id: term.id, start_date: '2026-11-09', end_date: '2026-11-10' }, 201);
   await request(admin, '/academics/class-subjects', 'POST', { class_id: classRecord.id, subject_ids: [subject.id], session_id: session.id }, 201);
   const teacher = await request(admin, '/teachers', 'POST', {
     first_name: 'E2E', last_name: 'Teacher', username: `e2e.teacher.${run}`, password, gender: 'other',
@@ -88,7 +89,7 @@ async function seed() {
     await request(admin, '/users', 'POST', { username, password, first_name: 'E2E', last_name: code, role_id: role.id, branch_id: branches[0].id, user_type: code === 'branch_admin' ? 'branch_admin' : 'staff' }, 201);
     actors[code] = await login(username, password);
   }
-  return { sessionId: session.id, termId: term.id, classId: classRecord.id, subjectId: subject.id, teacherId: teacher.id, studentId: student.id };
+  return { sessionId: session.id, termId: term.id, classId: classRecord.id, subjectId: subject.id, teacherId: teacher.id, studentId: student.id, examId: exam.id };
 }
 
 let fixture;
@@ -157,6 +158,18 @@ try {
     const response = await request(actors.student, '/payroll/employee-salaries', 'GET', undefined, null);
     assert.equal(response.status, 403);
   }, 'security');
+  await check('Student cannot self-confirm payment', async () => {
+    const invoices = rows(await request(admin, '/fees/invoices'));
+    const invoice = invoices.find(row => row.student_id === fixture.studentId);
+    const response = await request(actors.student, '/fees/payments', 'POST', { invoice_id: invoice.id, amount: 1, payment_date: '2026-11-09' }, null);
+    assert.equal(response.status, 403);
+  }, 'security');
+  await check('Finance cannot settle a USD invoice with an unconverted LRD amount', async () => {
+    const invoices = rows(await request(admin, '/fees/invoices'));
+    const invoice = invoices.find(row => row.student_id === fixture.studentId);
+    const response = await request(actors.accountant, '/fees/payments', 'POST', { invoice_id: invoice.id, amount: 1, currency_code: 'LRD', payment_date: '2026-11-09' }, null);
+    assert.equal(response.status, 400);
+  }, 'security');
 
   const index = fs.readFileSync('src/index.ts', 'utf8');
   const imports = [...index.matchAll(/import\s+(?:\{\s*(\w+)\s*\}|(\w+))\s+from\s+'\.\/routes\/([^']+)'/g)];
@@ -167,8 +180,10 @@ try {
     const source = fs.readFileSync(`src/routes/${match[3]}.ts`, 'utf8');
     for (const route of source.matchAll(/\w+Router\.get\(\s*'([^']+)'/g)) {
       if (route[1].includes(':') || ['/mine', '/student/me'].includes(route[1])) continue;
-      const path = mount[1].replace('/api', '') + (route[1] === '/' ? '' : route[1]);
-      const actor = path.startsWith('/platform-admin') ? actors.platform : admin;
+      let path = mount[1].replace('/api', '') + (route[1] === '/' ? '' : route[1]);
+      const actor = path.startsWith('/platform-admin') ? actors.platform : path === '/grade-approval/my-submissions' ? actors.teacher : admin;
+      if (path === '/attendance/report') path += `?class_id=${fixture.classId}`;
+      if (path === '/reports/academic') path += `?exam_id=${fixture.examId}`;
       await check(`GET ${path}`, async () => { await request(actor, path); }, 'api-smoke');
     }
   }
@@ -192,6 +207,7 @@ try {
           await page.locator('button[type=submit]').click();
           await page.waitForURL(url => !url.pathname.startsWith('/login'), { timeout: 30000 });
           await page.locator('aside').waitFor({ timeout: 30000 });
+          await page.waitForLoadState('networkidle', { timeout: 30000 });
           assert.equal(errors.length, 0, errors.join('; '));
         }, 'browser');
         // Expand all sidebar groups, discover actual role-visible navigation.
@@ -208,6 +224,9 @@ try {
           if (role === 'admin') {
             paths.add(`/students/${fixture.studentId}/edit`);
             paths.add(`/teachers/${fixture.teacherId}/edit`);
+            paths.add(`/examinations/${fixture.examId}/schedules`);
+            paths.add(`/examinations/${fixture.examId}/marks`);
+            paths.add(`/examinations/${fixture.examId}/results`);
             if (fixture.gradebookId) paths.add(`/gradebook/${fixture.gradebookId}`);
           }
         }

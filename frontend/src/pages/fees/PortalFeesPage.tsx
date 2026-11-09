@@ -1,12 +1,8 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { escapeHtml, openPrintDocument } from '../../utils/printDocument';
 
 export default function PortalFeesPage() {
-  const qc = useQueryClient();
-  const [form, setForm] = useState({ invoice_id: '', amount: '', payment_date: '', payment_method: 'cash', reference_number: '' });
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-fees'],
@@ -15,18 +11,6 @@ export default function PortalFeesPage() {
 
   const invoices = data?.invoices || [];
   const payments = data?.payments || [];
-  const openInvoices = invoices.filter((i: any) => Number(i.balance) > 0 && i.status !== 'paid');
-
-  const pay = async () => {
-    try {
-      await api.post('/fees/payments', { ...form, amount: Number(form.amount) });
-      toast.success('Payment recorded');
-      setForm({ invoice_id: '', amount: '', payment_date: '', payment_method: 'cash', reference_number: '' });
-      qc.invalidateQueries({ queryKey: ['my-fees'] });
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Payment failed');
-    }
-  };
 
   const printStatement = () => {
     openPrintDocument('Financial statement', `
@@ -54,23 +38,8 @@ export default function PortalFeesPage() {
       </div>
 
       <div className="card space-y-3">
-        <h2 className="font-semibold">Make a payment</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select className="input-field" value={form.invoice_id} onChange={(e) => setForm({ ...form, invoice_id: e.target.value })}>
-            <option value="">Select invoice</option>
-            {openInvoices.map((i: any) => (
-              <option key={i.id} value={i.id}>{i.invoice_number} — ${Number(i.balance || 0).toFixed(2)}</option>
-            ))}
-          </select>
-          <input className="input-field" type="number" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          <input className="input-field" type="date" value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} />
-          <select className="input-field" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
-            <option value="cash">Cash</option>
-            <option value="bank">Bank transfer</option>
-            <option value="mobile_money">Mobile money</option>
-          </select>
-        </div>
-        <button type="button" className="btn-primary" disabled={!form.invoice_id || !form.amount || !form.payment_date} onClick={pay}>Pay now</button>
+        <h2 className="font-semibold">Payment verification</h2>
+        <p className="text-sm text-gray-600">Contact your school's finance office to make a payment. Only authorized finance staff can verify and record payments. Online payment collection is not enabled.</p>
       </div>
 
       <div className="card overflow-x-auto">
