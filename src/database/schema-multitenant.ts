@@ -1,7 +1,7 @@
 export const schemaMultiTenant = `
 -- ============================================
 -- MULTI-TENANT FOUNDATION SCHEMA
--- Softwarevala Liberia School Management System
+-- AfriMind Tech & AI Consulting Agency (AfriMind) School Management System
 -- ============================================
 
 -- ============================================

@@ -1,7 +1,7 @@
 # SVL-SMS - School Management System
 ## Project Completion Summary
 
-**Project:** Softwarevala Liberia School Management System (SVL-SMS)  
+**Project:** AfriMind Tech & AI Consulting Agency (AfriMind) School Management System (SVL-SMS)
 **Type:** Offline-first School ERP  
 **Status:** ✅ ALL 7 PHASES COMPLETE  
 **Date:** August 3, 2026

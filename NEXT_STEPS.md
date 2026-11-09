@@ -109,7 +109,7 @@ Total: ~112 tables, all multi-tenant ready
 2. Drop `data/svl-sms.db`
 3. Create fresh database
 4. Update seed script with:
-   - Create Softwarevala platform
+   - Create AfriMind platform
    - Create demo institution  
    - Create platform super admin
    - Create institution admin

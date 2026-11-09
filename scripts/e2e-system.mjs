@@ -13,8 +13,9 @@ const results = [];
 const actors = {};
 const run = Date.now().toString(36);
 const password = crypto.randomBytes(20).toString('base64url');
-const fixturePath = 'test-results/fixtures.local.json';
-fs.mkdirSync('test-results', { recursive: true });
+const resultsDir = process.env.E2E_RESULTS_DIR || 'test-results';
+const fixturePath = `${resultsDir}/fixtures.local.json`;
+fs.mkdirSync(resultsDir, { recursive: true });
 
 async function request(actor, path, method = 'GET', body, expected = 200) {
   const headers = { 'Content-Type': 'application/json' };
@@ -170,6 +171,43 @@ try {
     const response = await request(actors.accountant, '/fees/payments', 'POST', { invoice_id: invoice.id, amount: 1, currency_code: 'LRD', payment_date: '2026-11-09' }, null);
     assert.equal(response.status, 400);
   }, 'security');
+  await check('Library book issue, return and availability reconciliation', async () => {
+    const book = await request(admin, '/library/books', 'POST', { title: `E2E Book ${run}`, quantity: 2 }, 201);
+    const issued = await request(actors.librarian, '/library/issue', 'POST', { book_id: book.id, issued_to: fixture.studentId, issue_date: '2026-11-09', due_date: '2026-11-30' }, 201);
+    assert.equal(Number(rows(await request(admin, '/library/books')).find(row => row.id === book.id).available), 1);
+    await request(actors.librarian, `/library/return/${issued.id}`, 'POST', {});
+    assert.equal(Number(rows(await request(admin, '/library/books')).find(row => row.id === book.id).available), 2);
+  });
+  await check('Inventory purchase and issue reconcile quantity', async () => {
+    const item = await request(admin, '/inventory/items', 'POST', { name: `E2E Stock ${run}`, quantity: 5, unit_price: 2 }, 201);
+    await request(admin, '/inventory/transactions', 'POST', { item_id: item.id, type: 'purchase', quantity: 3, date: '2026-11-09' }, 201);
+    await request(admin, '/inventory/transactions', 'POST', { item_id: item.id, type: 'issue', quantity: 2, date: '2026-11-09' }, 201);
+    assert.equal(Number(rows(await request(admin, '/inventory/items')).find(row => row.id === item.id).quantity), 6);
+  });
+  await check('Reception visitor check-in and checkout persist', async () => {
+    const visitor = await request(actors.receptionist, '/reception/visitors', 'POST', { name: `E2E Visitor ${run}`, purpose: 'Synthetic test' }, 201);
+    await request(actors.receptionist, `/reception/visitors/${visitor.id}/checkout`, 'PUT', {});
+    assert.ok(rows(await request(admin, '/reception/visitors')).find(row => row.id === visitor.id).check_out);
+  });
+  await check('Certificate template and generation interpolate student identity', async () => {
+    const template = await request(admin, '/certificates/templates', 'POST', { name: `E2E Certificate ${run}`, type: 'custom', content: 'Certificate for {{student_name}}' }, 201);
+    const certificate = await request(admin, '/certificates/generate', 'POST', { template_id: template.id, student_id: fixture.studentId, issued_date: '2026-11-09' }, 201);
+    const detail = await request(admin, `/certificates/${certificate.id}`);
+    assert.ok(JSON.stringify(detail).includes('Certificate for E2E Student'));
+  });
+  await check('Lesson plan delivery and teacher seen acknowledgement', async () => {
+    const plan = await request(admin, '/lesson-plans', 'POST', { title: `E2E Lesson ${run}`, class_id: fixture.classId, subject_id: fixture.subjectId, teacher_ids: [fixture.teacherId] }, 201);
+    assert.ok(rows(await request(actors.teacher, '/lesson-plans/mine')).some(row => row.id === plan.id));
+    await request(actors.teacher, `/lesson-plans/${plan.id}/seen`, 'POST', {});
+    const detail = await request(admin, `/lesson-plans/${plan.id}`);
+    assert.ok(detail.recipients.some(row => row.teacher_id === fixture.teacherId && row.seen_at));
+  });
+  await check('Assignment delivery, student submission and teacher visibility', async () => {
+    const assignment = await request(actors.teacher, '/assignments', 'POST', { title: `E2E Homework ${run}`, class_id: fixture.classId, subject_id: fixture.subjectId, session_id: fixture.sessionId, due_date: '2027-01-01', max_marks: 100 }, 201);
+    const submission = await request(actors.student, `/assignments/${assignment.id}/submit`, 'POST', { submission_text: 'Synthetic test answer' }, 201);
+    const detail = await request(actors.teacher, `/assignments/${assignment.id}`);
+    assert.ok(JSON.stringify(detail).includes(submission.id));
+  });
 
   const index = fs.readFileSync('src/index.ts', 'utf8');
   const imports = [...index.matchAll(/import\s+(?:\{\s*(\w+)\s*\}|(\w+))\s+from\s+'\.\/routes\/([^']+)'/g)];
@@ -202,6 +240,7 @@ try {
         page.on('response', response => { if (response.url().includes('/api/') && response.status() >= 400) failures.push({ path: new URL(response.url()).pathname, status: response.status() }); });
         await check(`${role}: UI login and dashboard`, async () => {
           await page.goto(`${base}/login`);
+          assert.ok((await page.locator('body').innerText()).includes('AfriMind Tech & AI Consulting Agency'), 'Company branding missing from login');
           await page.getByPlaceholder('Username, email, or Student ID').fill(actor.username);
           await page.getByPlaceholder('Enter your password').fill(actor.password);
           await page.locator('button[type=submit]').click();
@@ -210,6 +249,10 @@ try {
           await page.waitForLoadState('networkidle', { timeout: 30000 });
           assert.equal(errors.length, 0, errors.join('; '));
         }, 'browser');
+        if (results.at(-1)?.status !== 'passed') {
+          await context.close();
+          continue;
+        }
         // Expand all sidebar groups, discover actual role-visible navigation.
         for (const button of await page.locator('aside nav button').all()) await button.click();
         const links = await page.locator('aside a[href]').evaluateAll(nodes => [...new Set(nodes.map(node => node.getAttribute('href')))]);
@@ -242,6 +285,18 @@ try {
             return { linksDiscovered: links.length };
           }, 'browser');
         }
+        if (role === 'student') {
+          await check('Student UI automatically refreshes after an administrator attendance edit', async () => {
+            await page.goto(`${base}/student/attendance`);
+            await page.waitForLoadState('networkidle');
+            const sessions = rows(await request(admin, '/attendance/sessions'));
+            const session = sessions.find(row => row.class_id === fixture.classId);
+            assert.ok(session);
+            const marker = `LIVE-${run}`;
+            await request(admin, `/attendance/sessions/${session.id}`, 'PUT', { records: [{ student_id: fixture.studentId, status: 'present', remarks: marker }] });
+            await page.getByText(marker, { exact: true }).waitFor({ timeout: 25000 });
+          }, 'cross-session-ui');
+        }
         await context.close();
       }
     } finally { await browser.close(); }
@@ -251,8 +306,8 @@ try {
   console.error(error.message);
 } finally {
   const report = { timestamp: new Date().toISOString(), base, syntheticDataOnly: true, scope: 'Selected write workflows, security probes, static API smoke and role-visible browser routes; not exhaustive business acceptance', results };
-  fs.writeFileSync('test-results/system.json', JSON.stringify(report, null, 2));
+  fs.writeFileSync(`${resultsDir}/system.json`, JSON.stringify(report, null, 2));
   const failed = results.filter(result => result.status === 'failed').length;
-  console.log(`Results: ${results.length - failed} passed, ${failed} failed. See test-results/system.json (credentials excluded).`);
+  console.log(`Results: ${results.length - failed} passed, ${failed} failed. See ${resultsDir}/system.json (credentials excluded).`);
   process.exitCode = failed ? 1 : 0;
 }

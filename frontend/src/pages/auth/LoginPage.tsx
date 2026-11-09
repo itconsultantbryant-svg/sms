@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBrand } from '../../contexts/BrandContext';
 import { getRoleHomePath } from '../../utils/roleHome';
 import { schoolCodeFromHostname } from '../../utils/schoolHost';
+import { COMPANY_NAME, COMPANY_SHORT_NAME } from '../../utils/company';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -71,7 +72,7 @@ export default function LoginPage() {
 
   const primary = branding?.primary_color || '#1e40af';
   const secondary = branding?.secondary_color || '#1e3a8a';
-  const schoolName = branding?.institution_name || 'SOFTWAREVALA LIBERIA';
+  const schoolName = branding?.institution_name || COMPANY_SHORT_NAME;
   const subtitle = branding?.institution_name
     ? (branding.motto || 'School Management Portal')
     : 'School Management System';
@@ -184,7 +185,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-white/70 mt-6">
-          &copy; 2026 Softwarevala Liberia. All Rights Reserved.
+          &copy; 2026 {COMPANY_NAME} ({COMPANY_SHORT_NAME}). All Rights Reserved.
         </p>
       </div>
     </div>

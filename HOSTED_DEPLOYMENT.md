@@ -1,5 +1,7 @@
 # Vercel + Neon deployment
 
+Company: **AfriMind Tech & AI Consulting Agency (AfriMind)**. Product identifiers remain `sms` / `SVL-SMS`. Existing legacy hostnames, repository owner IDs and contact email addresses are retained until replacement domain/contact details are supplied; no customer school's stored name is automatically rewritten.
+
 The browser and Express API run in one Vercel project. Neon provides PostgreSQL, not the Express runtime. The browser calls same-origin `/api`; database credentials and signing keys must never use a `VITE_` prefix.
 
 ## Required configuration
@@ -15,6 +17,8 @@ The browser and Express API run in one Vercel project. Neon provides PostgreSQL,
 | `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | Initialization only | One-time administrator setup; password is never reset on restart |
 
 The ignored `.env.deployment.local` contains generated production setup values. Treat it as a password file; do not commit or copy into client assets. The original workspace `.env` is not overwritten. Never publish generated credentials in reports/logs.
+
+For development against the new Neon development branch, run `npm run dev:cloud` from the root. This explicitly uses `.env.development.local` and overrides the frontend's old local API setting, without replacing pre-existing workspace environment files. The browser runs at `http://localhost:5173` and calls the local API on port 3001.
 
 ## Initialize and validate
 

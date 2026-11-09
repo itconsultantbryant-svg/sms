@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBrand } from '../../contexts/BrandContext';
 import { getRoleHomePath, getMergedRoleCodes, isFinanceRole, isRegistrarRole } from '../../utils/roleHome';
 import api from '../../utils/api';
+import { COMPANY_NAME, COMPANY_SHORT_NAME } from '../../utils/company';
 
 interface SidebarProps {
   open: boolean;
@@ -498,7 +499,7 @@ export default function DynamicSidebar({ open, onClose }: SidebarProps) {
       </nav>
 
       <div className="p-3 border-t border-gray-200">
-        <p className="text-[10px] text-gray-400 text-center">&copy; 2026 Softwarevala Liberia</p>
+        <p className="text-[10px] text-gray-400 text-center" title={COMPANY_NAME}>&copy; 2026 {COMPANY_SHORT_NAME}</p>
       </div>
     </aside>
   );

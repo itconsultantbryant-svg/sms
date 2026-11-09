@@ -1,7 +1,7 @@
 export const schemaV2Consolidated = `
 -- ============================================
 -- CONSOLIDATED MULTI-TENANT SCHEMA V2
--- Softwarevala Liberia School Management System
+-- AfriMind Tech & AI Consulting Agency (AfriMind) School Management System
 -- Complete system schema with institution_id for tenant isolation
 -- ============================================
 

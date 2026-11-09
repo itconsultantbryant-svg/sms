@@ -1,6 +1,6 @@
 # SVL-SMS — Product Requirements Document
 
-**Product:** SVL School Management System, Softwarevala Liberia
+**Product:** SVL School Management System, AfriMind Tech & AI Consulting Agency (AfriMind)
 
 **Document version:** 1.0 — codebase-derived baseline and proposed release requirements
 

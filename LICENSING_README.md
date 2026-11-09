@@ -572,7 +572,7 @@ Look for:
 
 ## License
 
-SVL-SMS Backend © 2026 Softwarevala Liberia
+SVL-SMS Backend © 2026 AfriMind Tech & AI Consulting Agency (AfriMind)
 
 ---
 

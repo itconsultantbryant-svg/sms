@@ -4,7 +4,7 @@
   "description": "SVL School Management System - Desktop & Web",
   "main": "dist/electron/main.js",
   "homepage": "https://github.com/itconsultantbryant-svg/sms",
-  "author": "SVL-SMS Team",
+  "author": "AfriMind Tech & AI Consulting Agency (AfriMind)",
   "license": "Proprietary",
   "scripts": {
     "typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project frontend/tsconfig.json",
@@ -12,6 +12,7 @@
     "test:e2e": "node scripts/e2e-system.mjs",
     "db:initialize": "tsx scripts/initialize-database.ts",
     "dev": "tsx watch src/index.ts",
+    "dev:cloud": "concurrently \"node --env-file=.env.development.local --watch --import tsx src/index.ts\" \"npm --prefix frontend run dev:cloud\"",
     "build": "npm run build:frontend && npm run build:backend",
     "start": "node dist/index.js",
     "generate-license": "node tools/generate-license.js",

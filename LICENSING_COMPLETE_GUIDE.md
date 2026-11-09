@@ -488,4 +488,4 @@ The system is **modular, tested, and documented**. Ready to ship! 🚀
 ---
 
 *Generated: August 6, 2026*  
-*System: SVL-SMS (Softwarevala Liberia School Management System)*
+*System: SVL-SMS — AfriMind Tech & AI Consulting Agency (AfriMind) School Management System*

@@ -31,7 +31,7 @@ const platformRoles = [
     institution_id: null, // Platform role
     role_code: 'platform_admin',
     role_name: 'Platform Administrator',
-    description: 'Softwarevala Liberia - Manages all institutions',
+    description: 'AfriMind Tech & AI Consulting Agency (AfriMind) - Manages all institutions',
     is_system_role: 1,
     is_platform_role: 1,
     role_level: 'platform',
@@ -282,7 +282,7 @@ const passwordHash = bcrypt.hashSync('admin123', 10);
 const platformAdminId = uuidv4();
 const institutionAdminId = uuidv4();
 
-// Platform Super Admin (Softwarevala Liberia)
+// Platform Super Admin (AfriMind)
 db.prepare(`
   INSERT INTO users (
     id, institution_id, branch_id, username, email, password_hash,
@@ -420,7 +420,7 @@ console.log('\n' + '='.repeat(60));
 console.log('🎉 MULTI-TENANT SEED COMPLETE!');
 console.log('='.repeat(60));
 console.log('\n📊 Summary:');
-console.log(`   • Platform: Softwarevala Liberia`);
+console.log(`   • Platform: AfriMind Tech & AI Consulting Agency (AfriMind)`);
 console.log(`   • Institutions: 1 (Victory High School)`);
 console.log(`   • Branches: 1 (Main Campus)`);
 console.log(`   • Users: 2`);

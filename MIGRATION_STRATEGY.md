@@ -1,5 +1,5 @@
 # MIGRATION STRATEGY: Single-Tenant → Multi-Tenant
-## Softwarevala Liberia School Management System
+## AfriMind Tech & AI Consulting Agency (AfriMind) School Management System
 
 **Date:** August 3, 2026  
 **Strategy:** Hybrid Rebuild with Data Preservation
@@ -71,7 +71,7 @@ users → role → permissions
 
 **New Structure:**
 ```
-Platform Super Admin (Softwarevala)
+Platform Super Admin (AfriMind)
     ↓
 Institution Admin (per school)
     ↓
@@ -356,7 +356,7 @@ INSERT INTO institutions (
 SELECT 
   'default-inst-001',
   'SVLA',
-  'Softwarevala Liberia Academy',
+  'AfriMind Academy',
   email,
   mobile,
   country,

@@ -80,7 +80,7 @@ console.log('Seeding institution...');
 const instId = uuidv4();
 db.prepare(`
   INSERT OR IGNORE INTO institutions (id, name, code, country, currency, currency_symbol, timezone, motto)
-  VALUES (?, 'Softwarevala Liberia Academy', 'SVLA', 'Liberia', 'USD', '$', 'Africa/Monrovia', 'Manage. Educate. Automate.')
+  VALUES (?, 'AfriMind Academy', 'SVLA', 'Liberia', 'USD', '$', 'Africa/Monrovia', 'Manage. Educate. Automate.')
 `).run(instId);
 
 // Create main branch

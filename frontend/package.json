@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:cloud": "VITE_API_URL=http://localhost:3001/api vite",
     "build": "npx vite build",
     "build:electron": "npx vite build --mode electron",
     "preview": "vite preview"

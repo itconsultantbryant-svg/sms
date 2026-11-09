@@ -5,6 +5,7 @@ import {
   DollarSign, Library, Package, Bus, DoorOpen, Award, Briefcase, Send, BarChart3, Shield, KeyRound, MonitorSmartphone
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { COMPANY_NAME, COMPANY_SHORT_NAME } from '../../utils/company';
 
 interface SidebarProps {
   open: boolean;
@@ -63,7 +64,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     <aside className="fixed inset-y-0 left-0 w-64 bg-primary-900 text-white flex flex-col z-30">
       <div className="flex items-center justify-between h-16 px-4 border-b border-primary-800">
         <div>
-          <h1 className="text-sm font-bold tracking-wide">SOFTWAREVALA LIBERIA</h1>
+          <h1 className="text-sm font-bold tracking-wide" title={COMPANY_NAME}>{COMPANY_SHORT_NAME}</h1>
           <p className="text-[10px] text-primary-300 tracking-wider">SCHOOL MANAGEMENT SYSTEM</p>
         </div>
         <button onClick={onClose} className="lg:hidden text-primary-300 hover:text-white">
@@ -160,7 +161,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
       <div className="p-4 border-t border-primary-800">
         <p className="text-[10px] text-primary-400 text-center">
-          &copy; 2026 Softwarevala Liberia
+          &copy; 2026 {COMPANY_SHORT_NAME}
         </p>
       </div>
     </aside>

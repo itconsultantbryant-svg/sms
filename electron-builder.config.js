@@ -8,7 +8,7 @@
 module.exports = {
   appId: 'com.svl-sms.desktop',
   productName: 'SVL-SMS',
-  copyright: 'Copyright © SVL-SMS Team',
+  copyright: 'Copyright © AfriMind Tech & AI Consulting Agency (AfriMind)',
 
   directories: {
     buildResources: 'assets',

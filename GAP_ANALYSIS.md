@@ -12,7 +12,7 @@
 
 **REQUIRED:**
 ```
-SOFTWAREVALA LIBERIA (Platform Owner)
+AFRIMIND (Platform Owner)
     ├── Institution 1: St. Peter's School
     │   ├── Main Campus
     │   └── Paynesville Branch
@@ -39,7 +39,7 @@ Single Institution System
 - Add `institutions` table (separate from branches)
 - Add `institution_id` to **ALL 85+ tables**
 - Rebuild authentication hierarchy:
-  - Super Admin (Softwarevala) → manages platform
+  - Super Admin (AfriMind) → manages platform
   - Institution Admin → manages their institution
   - Branch Admin → manages their branch
   - Other roles → scoped to institution
@@ -52,7 +52,7 @@ Single Institution System
 
 **REQUIRED ROLE HIERARCHY:**
 ```
-Super Administrator (Softwarevala Liberia)
+Super Administrator (AfriMind)
     ├── Institution Administrator (per school)
     │   ├── Branch Administrator (per campus)
     │   ├── Principal
@@ -1085,7 +1085,7 @@ Super Admin
 
 **Required Hierarchy:**
 ```
-Platform Super Admin (Softwarevala Liberia)
+Platform Super Admin (AfriMind)
   ├── Institution 1
   │   ├── Institution Admin
   │   ├── Branch 1
