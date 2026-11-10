@@ -191,24 +191,54 @@ function emptyToNull(value: any) {
 }
 
 studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest, res: Response) => {
+  try {
+    const result = createStudentEnrollment(req.body, {
+      institutionId: req.institution_id!, branchId: req.user?.branch_id, createdBy: req.user?.id,
+    });
+    res.status(201).json(result);
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to create student' });
+  }
+});
+
+// Shared by direct enrollment and approved admission conversion. Nested database
+// transactions use savepoints, allowing conversion and billing to commit together.
+export function createStudentEnrollment(body: any, context: {
+  institutionId: string; branchId?: string; createdBy?: string; studentId?: string;
+}) {
   const {
     first_name, middle_name, last_name, date_of_birth, gender, nationality,
     county, address, phone, email, photo, blood_group, medical_info,
     previous_school, previous_class, admission_date, branch_id, class_id,
     section_id, session_id, parent, prior_records
-  } = req.body;
+  } = body;
 
   if (!first_name || !last_name) {
-    res.status(400).json({ error: 'First name and last name are required' });
-    return;
+    throw Object.assign(new Error('First name and last name are required'), { status: 400 });
   }
-  if (!req.institution_id) {
-    res.status(400).json({ error: 'Select a school before admitting a student' });
-    return;
+  if (!context.institutionId) {
+    throw Object.assign(new Error('Select a school before admitting a student'), { status: 400 });
   }
 
   const db = getDatabase();
-  const id = generateId();
+  const id = context.studentId || generateId();
+  const branchId = emptyToNull(branch_id) || emptyToNull(context.branchId);
+  for (const [table, value] of [['classes', class_id], ['academic_sessions', session_id], ['branches', branchId]]) {
+    if (value && !db.prepare(`SELECT id FROM ${table} WHERE id = ? AND institution_id = ?`).get(value, context.institutionId)) {
+      throw Object.assign(new Error('Class, session and branch must belong to this school'), { status: 400 });
+    }
+  }
+  if (context.branchId && branchId !== context.branchId) {
+    throw Object.assign(new Error('Enrollment must use your assigned branch'), { status: 403 });
+  }
+  const cls = class_id ? db.prepare('SELECT branch_id, is_active FROM classes WHERE id = ? AND institution_id = ?').get(class_id, context.institutionId) : null;
+  if (cls?.is_active === 0) throw Object.assign(new Error('Select an active class'), { status: 400 });
+  if (cls?.branch_id && cls.branch_id !== branchId) {
+    throw Object.assign(new Error('Class must belong to the selected branch'), { status: 400 });
+  }
+  if (section_id && !db.prepare('SELECT id FROM sections WHERE id = ? AND class_id = ? AND institution_id = ? AND is_active = 1').get(section_id, class_id, context.institutionId)) {
+    throw Object.assign(new Error('Section must belong to the selected class and school'), { status: 400 });
+  }
   let admission_number = generateAdmissionNumber();
   for (let attempt = 0; attempt < 5; attempt++) {
     const taken = db.prepare('SELECT id FROM students WHERE admission_number = ?').get(admission_number)
@@ -234,8 +264,8 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
   const transaction = db.transaction(() => {
     insertStudent.run(
       id,
-      req.institution_id, // TENANT ISOLATION
-      emptyToNull(branch_id) || emptyToNull(req.user?.branch_id),
+      context.institutionId,
+      branchId,
       admission_number,
       first_name,
       emptyToNull(middle_name),
@@ -259,7 +289,7 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
     );
 
     // Login user: Student ID (admission_number) + default password
-    const studentRoleId = ensurePortalRole(req.institution_id, 'student', 'Student');
+    const studentRoleId = ensurePortalRole(context.institutionId, 'student', 'Student');
 
     const passwordHash = bcrypt.hashSync(temporary_password, 10);
     let loginEmail = emptyToNull(email) || `${admission_number.toLowerCase()}@student.local`;
@@ -273,8 +303,8 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'student', 'student', ?, 1)
     `).run(
       userId,
-      req.institution_id,
-      emptyToNull(branch_id) || emptyToNull(req.user?.branch_id),
+      context.institutionId,
+      branchId,
       admission_number,
       loginEmail,
       passwordHash,
@@ -291,7 +321,7 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
     const relationship = ['father', 'mother', 'guardian', 'other'].includes(String(parent?.relationship || '').toLowerCase())
       ? String(parent.relationship).toLowerCase()
       : 'guardian';
-    if (parent?.first_name && parent?.last_name) {
+    if (parent?.first_name && typeof parent.last_name === 'string') {
       const parentId = generateId();
       const parentUserId = generateId();
       const parentPassword = generateDefaultPassword();
@@ -301,7 +331,7 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         parentId,
-        req.institution_id, // TENANT ISOLATION
+        context.institutionId,
         parent.first_name,
         parent.last_name,
         relationship,
@@ -312,7 +342,7 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
       );
       db.prepare('INSERT INTO student_parents (student_id, parent_id, is_primary) VALUES (?, ?, 1)').run(id, parentId);
 
-      let parentRoleId = ensurePortalRole(req.institution_id, 'parent', 'Parent');
+      let parentRoleId = ensurePortalRole(context.institutionId, 'parent', 'Parent');
 
       const parentUsername = parent.email
         ? String(parent.email).split('@')[0].toLowerCase().replace(/[^a-z0-9._]/g, '')
@@ -332,8 +362,8 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'parent', 'parent', ?, 1)
       `).run(
         parentUserId,
-        req.institution_id,
-        emptyToNull(branch_id) || emptyToNull(req.user?.branch_id),
+        context.institutionId,
+        branchId,
         finalParentUsername,
         parentLoginEmail,
         bcrypt.hashSync(parentPassword, 10),
@@ -349,7 +379,7 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
       db.prepare(`
         INSERT INTO parent_students (id, institution_id, parent_id, student_id, relationship, is_primary)
         VALUES (?, ?, ?, ?, ?, 1)
-      `).run(generateId(), req.institution_id, parentUserId, id, relationship);
+      `).run(generateId(), context.institutionId, parentUserId, id, relationship);
 
       parentCredentials = {
         username: finalParentUsername,
@@ -370,7 +400,7 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         generateId(),
-        req.institution_id,
+        context.institutionId,
         id,
         type,
         record.title || (type === 'transfer_transcript' ? 'Transfer transcript' : 'Previous gradesheet'),
@@ -381,43 +411,17 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
         record.file_data || null,
         record.file_name || null,
         record.mime_type || null,
-        req.user?.id || null
+        context.createdBy || null
       );
     }
+    return class_id ? assignClassFees({
+      institutionId: context.institutionId, createdBy: context.createdBy,
+      studentId: id, classId: class_id, sessionId: session_id || null,
+    }).items : 0;
   });
 
-  try {
-    transaction();
-  } catch (error: any) {
-    console.error('Student creation error:', error);
-    const message = String(error?.message || '');
-    if (message.includes('UNIQUE') && message.toLowerCase().includes('email')) {
-      res.status(409).json({ error: 'That email is already used by another account' });
-      return;
-    }
-    if (message.includes('CHECK')) {
-      res.status(400).json({ error: 'A student field is invalid. Check gender and parent relationship.' });
-      return;
-    }
-    res.status(500).json({ error: 'Failed to create student', details: message });
-    return;
-  }
-
-  let feesAssigned = 0;
-  if (req.institution_id && class_id) {
-    try {
-      feesAssigned = assignClassFees({
-        institutionId: req.institution_id,
-        createdBy: req.user?.id,
-        studentId: id,
-        classId: class_id,
-      }).items;
-    } catch (err) {
-      console.error('Could not assign class fees to new student:', err);
-    }
-  }
-
-  res.status(201).json({
+  const feesAssigned = transaction();
+  return {
     id,
     admission_number,
     username: admission_number,
@@ -427,8 +431,8 @@ studentsRouter.post('/', requirePermission('students.create'), (req: AuthRequest
     message: feesAssigned
       ? `Student admitted and billed for ${feesAssigned} class fee${feesAssigned === 1 ? '' : 's'}`
       : 'Student admitted successfully',
-  });
-});
+  };
+}
 
 studentsRouter.put('/:id', requirePermission('students.edit'), (req: AuthRequest, res: Response) => {
   const { id } = req.params;

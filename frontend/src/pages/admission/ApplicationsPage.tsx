@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Plus,
   Search,
@@ -27,6 +28,10 @@ interface Application {
 }
 
 export default function ApplicationsPage() {
+  const { user } = useAuth();
+  const hasRole = (roles: string[]) => roles.some(role => user?.user_type === role || user?.role_codes?.includes(role));
+  const canCreate = hasRole(['platform_admin', 'institution_admin', 'principal', 'registrar']);
+  const canReview = hasRole(['platform_admin', 'institution_admin', 'principal']);
   const [searchParams] = useSearchParams();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,13 +119,13 @@ export default function ApplicationsPage() {
             Manage and process admission applications
           </p>
         </div>
-        <Link
+        {canCreate && <Link
           to="/admission/applications/new"
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
         >
           <Plus className="h-5 w-5 mr-2" />
           New Application
-        </Link>
+        </Link>}
       </div>
 
       {/* Filters */}
@@ -171,7 +176,7 @@ export default function ApplicationsPage() {
             <p className="mt-1 text-sm text-gray-500">
               Get started by creating a new application.
             </p>
-            <div className="mt-6">
+            {canCreate && <div className="mt-6">
               <Link
                 to="/admission/applications/new"
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
@@ -179,7 +184,7 @@ export default function ApplicationsPage() {
                 <Plus className="h-5 w-5 mr-2" />
                 New Application
               </Link>
-            </div>
+            </div>}
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
@@ -240,11 +245,13 @@ export default function ApplicationsPage() {
                     <div className="flex justify-end space-x-2">
                       <Link
                         to={`/admission/applications/${application.id}`}
+                        aria-label={`View application ${application.application_number}`}
                         className="text-primary-600 hover:text-primary-900"
                       >
                         <Eye className="h-5 w-5 inline" />
                       </Link>
-                      {application.status === 'pending' && (
+                      {application.status === 'approved' && <Link className="text-green-700" to={`/admission/applications/${application.id}`}>Review enrollment</Link>}
+                      {canReview && application.status === 'pending' && (
                         <button
                           onClick={() => handleStatusUpdate(application.id, 'under_review')}
                           className="text-blue-600 hover:text-blue-900"
@@ -253,7 +260,7 @@ export default function ApplicationsPage() {
                           <Clock className="h-5 w-5" />
                         </button>
                       )}
-                      {application.status === 'under_review' && (
+                      {canReview && application.status === 'under_review' && (
                         <>
                           <button
                             onClick={() => handleStatusUpdate(application.id, 'approved')}

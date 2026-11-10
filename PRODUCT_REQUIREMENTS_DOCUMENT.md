@@ -13,6 +13,8 @@
 
 > Later teacher-assignment hardening and the scoped browser offline/synchronization implementation are tracked in `OFFLINE_AND_PRD_IMPLEMENTATION.md`. Offline financial settlement and full standalone desktop/cloud replication are not implied.
 
+> The subsequent core admissions application/review/enrollment implementation and its remaining limits are tracked in `ADMISSIONS_IMPLEMENTATION.md`. Baseline admissions findings below are historical, not a statement that the new flow was absent from later releases.
+
 ## 1. Executive summary
 
 SVL-SMS is a substantially developed school-management platform with a React web application, an Express API, multi-institution administration, role-specific portals, and an Electron desktop edition. It brings student registration, academic setup, teaching, attendance, assessments, fees, payroll, school operations, communications, and reports into one system.

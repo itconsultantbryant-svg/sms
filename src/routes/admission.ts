@@ -1,14 +1,84 @@
 import { Router, Response } from 'express';
 import { getDatabase } from '../database/init';
-import { AuthRequest, authorize } from '../middleware/auth';
+import { AuthRequest, authorize, requirePermission } from '../middleware/auth';
 import { injectTenant, requireTenant } from '../middleware/tenant';
-import { generateId, paginate, buildSearchQuery } from '../utils/helpers';
+import { generateId, paginate } from '../utils/helpers';
+import { createStudentEnrollment } from './students';
 
 export const admissionRouter = Router();
 
 // Apply tenant middleware to ALL admission routes
 admissionRouter.use(injectTenant);
 admissionRouter.use(requireTenant);
+admissionRouter.use(authorize('platform_admin', 'institution_admin', 'principal', 'registrar', 'receptionist'));
+
+function inputError(message: string, status = 400): never {
+  throw Object.assign(new Error(message), { status });
+}
+
+function validatePlacement(db: any, institutionId: string, input: any) {
+  for (const [table, value] of [['classes', input.class_id], ['academic_sessions', input.session_id], ['branches', input.branch_id]]) {
+    if (value && !db.prepare(`SELECT id FROM ${table} WHERE id = ? AND institution_id = ?`).get(value, institutionId)) {
+      inputError('Class, academic session and branch must belong to this school');
+    }
+  }
+  const cls = input.class_id ? db.prepare('SELECT branch_id FROM classes WHERE id = ? AND institution_id = ?').get(input.class_id, institutionId) : null;
+  if (cls?.branch_id && cls.branch_id !== input.branch_id) inputError('Class must belong to the selected branch');
+  if (input.section_id && !db.prepare('SELECT id FROM sections WHERE id = ? AND institution_id = ? AND class_id = ?').get(input.section_id, institutionId, input.class_id)) {
+    inputError('Section must belong to the selected class and school');
+  }
+}
+
+function checkBranch(req: AuthRequest, record: any) {
+  if (req.user?.branch_id && record.branch_id !== req.user.branch_id) inputError('Record not found in your assigned branch', 404);
+}
+
+function presentApplication(row: any) {
+  return { ...row, class_id: row.desired_class_id, section_id: row.desired_section_id,
+    session_id: row.desired_session_id,
+    status: row.converted_to_student_id ? 'admitted' : ['draft', 'submitted'].includes(row.status) ? 'pending' : row.status };
+}
+
+function saveApplication(db: any, req: AuthRequest, input: any, enquiryId: string | null = null) {
+  if (!req.institution_id) inputError('Select a school');
+  const branchId = input.branch_id || req.user?.branch_id || null;
+  validatePlacement(db, req.institution_id, { ...input, branch_id: branchId });
+  if (req.user?.branch_id && branchId !== req.user.branch_id) inputError('Use your assigned branch', 403);
+  const parentName = String(input.parent_name || '').trim().split(/\s+/);
+  const parent = input.parent || { first_name: parentName[0], last_name: parentName.slice(1).join(' '),
+    phone: input.parent_phone, email: input.parent_email, address: input.parent_address, occupation: input.parent_occupation };
+  if (!input.first_name?.trim() || !input.last_name?.trim() || !parent.first_name?.trim() || !parent.phone?.trim()) {
+    inputError('Student name, parent/guardian name and parent/guardian phone are required');
+  }
+  if (input.gender && !['male', 'female', 'other'].includes(input.gender)) inputError('Invalid gender');
+  if (input.date_of_birth && (!/^\d{4}-\d{2}-\d{2}$/.test(input.date_of_birth) || !Number.isFinite(Date.parse(input.date_of_birth)))) inputError('Invalid date of birth');
+  const id = generateId();
+  const number = `APP-${generateId()}`;
+  db.prepare(`INSERT INTO admission_applications (
+    id, institution_id, branch_id, application_number, enquiry_id, first_name, middle_name, last_name,
+    date_of_birth, gender, nationality, phone, email, address, desired_class_id, desired_section_id,
+    desired_session_id, previous_school, previous_class, medical_conditions, status, submitted_at, created_by
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', datetime('now'), ?)`).run(
+    id, req.institution_id, branchId, number, enquiryId, input.first_name.trim(), input.middle_name || null,
+    input.last_name.trim(), input.date_of_birth || null, input.gender || null, input.nationality || 'Liberian',
+    input.phone || null, input.email || null, input.address || null, input.class_id || null, input.section_id || null,
+    input.session_id || null, input.previous_school || null, input.previous_class || null, input.medical_conditions || null, req.user?.id || null);
+  db.prepare(`INSERT INTO application_parents (id, institution_id, application_id, relationship, is_primary,
+    first_name, last_name, phone, email, address, occupation) VALUES (?, ?, ?, 'guardian', 1, ?, ?, ?, ?, ?, ?)`).run(
+    generateId(), req.institution_id, id, parent.first_name.trim(), String(parent.last_name || '').trim(), parent.phone.trim(),
+    parent.email || null, parent.address || null, parent.occupation || null);
+  return { id, application_number: number };
+}
+
+function admissionFailure(res: Response, error: any) {
+  res.status(error.status || 500).json({ error: error.status ? error.message : 'Admission operation failed; no changes were committed' });
+}
+
+function auditAdmission(db: any, req: AuthRequest, id: string, action: string, values: any) {
+  db.prepare(`INSERT INTO audit_logs (id, institution_id, user_id, action, entity_type, entity_id, module, new_values)
+    VALUES (?, ?, ?, ?, 'admission_application', ?, 'admissions', ?)`).run(
+    generateId(), req.institution_id, req.user?.id || null, action, id, JSON.stringify(values));
+}
 
 // ============================================
 // ADMISSION ENQUIRIES
@@ -21,11 +91,11 @@ admissionRouter.get('/dashboard/stats', (req: AuthRequest, res: Response) => {
   const stats = {
     pending_enquiries: db.prepare(`SELECT COUNT(*) as count FROM admission_enquiries WHERE institution_id = ? AND status = 'new'`).get(req.institution_id) as any,
     converted_enquiries: db.prepare(`SELECT COUNT(*) as count FROM admission_enquiries WHERE institution_id = ? AND converted_to_application_id IS NOT NULL`).get(req.institution_id) as any,
-    pending_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status = 'pending'`).get(req.institution_id) as any,
+    pending_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status IN ('draft', 'submitted') AND converted_to_student_id IS NULL`).get(req.institution_id) as any,
     review_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status = 'under_review'`).get(req.institution_id) as any,
-    approved_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status = 'approved'`).get(req.institution_id) as any,
+    approved_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status = 'approved' AND converted_to_student_id IS NULL`).get(req.institution_id) as any,
     rejected_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status = 'rejected'`).get(req.institution_id) as any,
-    admitted_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND status = 'admitted'`).get(req.institution_id) as any
+    admitted_applications: db.prepare(`SELECT COUNT(*) as count FROM admission_applications WHERE institution_id = ? AND converted_to_student_id IS NOT NULL`).get(req.institution_id) as any
   };
 
   res.json({
@@ -216,7 +286,7 @@ admissionRouter.delete('/enquiries/:id', authorize('platform_admin', 'institutio
 });
 
 // Convert enquiry to application
-admissionRouter.post('/enquiries/:id/convert', authorize('platform_admin', 'institution_admin', 'principal'), (req: AuthRequest, res: Response) => {
+admissionRouter.post('/enquiries/:id/convert', authorize('platform_admin', 'institution_admin', 'principal', 'registrar'), (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const db = getDatabase();
 
@@ -233,45 +303,24 @@ admissionRouter.post('/enquiries/:id/convert', authorize('platform_admin', 'inst
     return;
   }
 
-  // Create application
-  const applicationId = generateId();
-  const applicationNumber = `APP-${Date.now()}`;
-
-  const transaction = db.transaction(() => {
-    // Insert application
-    db.prepare(`
-      INSERT INTO admission_applications (
-        id, institution_id, branch_id, application_number, application_date,
-        enquiry_id, first_name, middle_name, last_name, date_of_birth, gender,
-        class_id, previous_school, previous_class,
-        parent_name, parent_phone, parent_email, parent_address, parent_occupation,
-        status, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-    `).run(
-      applicationId, req.institution_id, enquiry.branch_id, applicationNumber,
-      new Date().toISOString().split('T')[0], id,
-      enquiry.student_first_name, enquiry.student_middle_name, enquiry.student_last_name,
-      enquiry.student_dob, enquiry.student_gender, enquiry.desired_class_id,
-      enquiry.previous_school, enquiry.previous_class,
-      enquiry.parent_name, enquiry.parent_phone, enquiry.parent_email,
-      enquiry.parent_address, enquiry.parent_occupation, req.user?.id
-    );
-
-    // Update enquiry status
-    db.prepare(`
-      UPDATE admission_enquiries
-      SET converted_to_application_id = ?, converted_at = datetime('now'), updated_at = datetime('now')
-      WHERE id = ? AND institution_id = ?
-    `).run(applicationId, id, req.institution_id);
-  });
-
-  transaction();
-
-  res.status(201).json({
-    application_id: applicationId,
-    application_number: applicationNumber,
-    message: 'Enquiry converted to application successfully'
-  });
+  try {
+    const result = db.transaction(() => {
+      checkBranch(req, enquiry);
+      // Conditional update serializes concurrent conversions on PostgreSQL too.
+      const claimed = db.prepare(`UPDATE admission_enquiries SET updated_at = datetime('now')
+        WHERE id = ? AND institution_id = ? AND converted_to_application_id IS NULL`).run(id, req.institution_id);
+      if (!claimed.changes) inputError('Enquiry already converted to application', 409);
+      const application = saveApplication(db, req, {
+        ...enquiry, first_name: enquiry.student_first_name, middle_name: enquiry.student_middle_name,
+        last_name: enquiry.student_last_name, date_of_birth: enquiry.student_dob,
+        gender: enquiry.student_gender, class_id: enquiry.desired_class_id, session_id: enquiry.desired_session_id,
+      }, id);
+      db.prepare(`UPDATE admission_enquiries SET status = 'converted', converted_to_application_id = ?, converted_at = datetime('now')
+        WHERE id = ? AND institution_id = ?`).run(application.id, id, req.institution_id);
+      return application;
+    })();
+    res.status(201).json({ application_id: result.id, application_number: result.application_number });
+  } catch (error) { admissionFailure(res, error); }
 });
 
 // ============================================
@@ -286,6 +335,7 @@ admissionRouter.get('/applications', (req: AuthRequest, res: Response) => {
 
   let where = `WHERE a.institution_id = ?`;
   const params: any[] = [req.institution_id];
+  if (req.user?.branch_id) { where += ' AND a.branch_id = ?'; params.push(req.user.branch_id); }
 
   if (search) {
     where += ` AND (a.first_name LIKE ? OR a.last_name LIKE ? OR a.phone LIKE ? OR a.application_number LIKE ?)`;
@@ -294,8 +344,12 @@ admissionRouter.get('/applications', (req: AuthRequest, res: Response) => {
   }
 
   if (status) {
-    where += ' AND a.status = ?';
-    params.push(status);
+    if (status === 'admitted') where += ' AND a.converted_to_student_id IS NOT NULL';
+    else {
+      where += ' AND a.converted_to_student_id IS NULL';
+      if (status === 'pending') where += " AND a.status IN ('draft', 'submitted')";
+      else { where += ' AND a.status = ?'; params.push(status); }
+    }
   }
 
   const total = db.prepare(`SELECT COUNT(*) as count FROM admission_applications a ${where}`).get(...params) as any;
@@ -313,7 +367,7 @@ admissionRouter.get('/applications', (req: AuthRequest, res: Response) => {
     LIMIT ? OFFSET ?
   `).all(...params, lim, offset);
 
-  res.json({ data: applications, total: total.count, page: parseInt(page), limit: lim });
+  res.json({ data: applications.map(presentApplication), total: total.count, page: parseInt(page), limit: lim });
 });
 
 // Get single application
@@ -330,7 +384,7 @@ admissionRouter.get('/applications/:id', (req: AuthRequest, res: Response) => {
     FROM admission_applications a
     LEFT JOIN branches b ON a.branch_id = b.id
     LEFT JOIN classes c ON a.desired_class_id = c.id
-    LEFT JOIN academic_sessions s ON a.session_id = s.id
+    LEFT JOIN academic_sessions s ON a.desired_session_id = s.id
     WHERE a.id = ? AND a.institution_id = ?
   `).get(id, req.institution_id) as any;
 
@@ -339,74 +393,21 @@ admissionRouter.get('/applications/:id', (req: AuthRequest, res: Response) => {
     return;
   }
 
-  res.json(application);
+  if (req.user?.branch_id && application.branch_id !== req.user.branch_id) {
+    res.status(404).json({ error: 'Application not found in your assigned branch' }); return;
+  }
+  const parent = db.prepare(`SELECT first_name, last_name, phone, email, address, occupation, relationship
+    FROM application_parents WHERE application_id = ? AND institution_id = ? ORDER BY is_primary DESC, id LIMIT 1`).get(id, req.institution_id);
+  res.json({ ...presentApplication(application), parent });
 });
 
 // Create new application
-admissionRouter.post('/applications', authorize('platform_admin', 'institution_admin', 'principal'), (req: AuthRequest, res: Response) => {
-  const {
-    first_name,
-    middle_name,
-    last_name,
-    date_of_birth,
-    gender,
-    phone,
-    email,
-    nationality,
-    address,
-    class_id,
-    branch_id,
-    session_id,
-    previous_school,
-    previous_class,
-    parent_name,
-    parent_phone,
-    parent_email,
-    parent_address,
-    parent_occupation,
-    guardian_name,
-    guardian_phone,
-    guardian_relationship,
-    medical_conditions,
-    remarks
-  } = req.body;
-
-  if (!first_name || !last_name || !date_of_birth || !class_id || !parent_name || !parent_phone) {
-    res.status(400).json({
-      error: 'Required fields missing',
-      required: ['first_name', 'last_name', 'date_of_birth', 'class_id', 'parent_name', 'parent_phone']
-    });
-    return;
-  }
-
-  const db = getDatabase();
-  const id = generateId();
-  const applicationNumber = `APP-${Date.now()}`;
-
-  db.prepare(`
-    INSERT INTO admission_applications (
-      id, institution_id, branch_id, application_number, application_date,
-      first_name, middle_name, last_name, date_of_birth, gender,
-      phone, email, nationality, address, class_id, session_id,
-      previous_school, previous_class,
-      parent_name, parent_phone, parent_email, parent_address, parent_occupation,
-      guardian_name, guardian_phone, guardian_relationship,
-      medical_conditions, status, remarks, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `).run(
-    id, req.institution_id, branch_id || req.user?.branch_id || null,
-    applicationNumber, new Date().toISOString().split('T')[0],
-    first_name, middle_name || null, last_name, date_of_birth,
-    gender ? gender.toLowerCase() : null, phone || null, email || null,
-    nationality || 'Liberian', address || null, class_id, session_id || null,
-    previous_school || null, previous_class || null,
-    parent_name, parent_phone, parent_email || null, parent_address || null,
-    parent_occupation || null, guardian_name || null, guardian_phone || null,
-    guardian_relationship || null, medical_conditions || null, remarks || null,
-    req.user?.id
-  );
-
-  res.status(201).json({ id, application_number: applicationNumber, message: 'Application created successfully' });
+admissionRouter.post('/applications', authorize('platform_admin', 'institution_admin', 'principal', 'registrar'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDatabase();
+    const result = db.transaction(() => saveApplication(db, req, req.body))();
+    res.status(201).json(result);
+  } catch (error) { admissionFailure(res, error); }
 });
 
 // Update application status
@@ -414,23 +415,77 @@ admissionRouter.put('/applications/:id/status', authorize('platform_admin', 'ins
   const { id } = req.params;
   const { status, remarks } = req.body;
 
-  if (!status || !['pending', 'under_review', 'approved', 'rejected', 'admitted'].includes(status)) {
+  if (!status || !['pending', 'under_review', 'approved', 'rejected'].includes(status)) {
     res.status(400).json({ error: 'Invalid status' });
     return;
   }
 
   const db = getDatabase();
 
-  db.prepare(`
-    UPDATE admission_applications
-    SET status = ?,
-        status_remarks = ?,
-        status_updated_at = datetime('now'),
-        updated_at = datetime('now')
-    WHERE id = ? AND institution_id = ?
-  `).run(status, remarks || null, id, req.institution_id);
+  try {
+    db.transaction(() => {
+      const locked = db.prepare(`UPDATE admission_applications SET updated_at = updated_at
+        WHERE id = ? AND institution_id = ?`).run(id, req.institution_id);
+      if (!locked.changes) inputError('Application not found', 404);
+      const application = db.prepare('SELECT * FROM admission_applications WHERE id = ? AND institution_id = ?').get(id, req.institution_id);
+      checkBranch(req, application);
+      if (application.converted_to_student_id) inputError('An enrolled application cannot change status', 409);
+      const nextStatus = status === 'pending' ? 'submitted' : status;
+      const transitions: Record<string, string[]> = {
+        draft: ['submitted', 'under_review'], submitted: ['under_review', 'rejected'],
+        under_review: ['approved', 'rejected', 'submitted'], rejected: ['under_review'], approved: ['under_review', 'rejected'],
+      };
+      if (nextStatus !== application.status && !transitions[application.status]?.includes(nextStatus)) inputError('Invalid application status transition', 409);
+      db.prepare(`UPDATE admission_applications SET status = ?, review_notes = ?, reviewed_by = ?, reviewed_at = datetime('now'),
+        approved_by = ?, approved_at = ?, rejected_by = ?, rejected_at = ?, rejection_reason = ?, updated_at = datetime('now')
+        WHERE id = ? AND institution_id = ?`).run(nextStatus, remarks || null, req.user?.id || null,
+        nextStatus === 'approved' ? req.user?.id : null, nextStatus === 'approved' ? new Date().toISOString() : null,
+        nextStatus === 'rejected' ? req.user?.id : null, nextStatus === 'rejected' ? new Date().toISOString() : null,
+        nextStatus === 'rejected' ? remarks || null : null, id, req.institution_id);
+      auditAdmission(db, req, id, 'application_status_changed', { from: application.status, to: nextStatus });
+    })();
+    res.json({ message: 'Application status updated successfully' });
+  } catch (error) { admissionFailure(res, error); }
+});
 
-  res.json({ message: 'Application status updated successfully' });
+admissionRouter.post('/applications/:id/enroll', requirePermission('students.create'), (req: AuthRequest, res: Response) => {
+  const db = getDatabase();
+  try {
+    const result = db.transaction(() => {
+      const locked = db.prepare(`UPDATE admission_applications SET updated_at = updated_at
+        WHERE id = ? AND institution_id = ?`).run(req.params.id, req.institution_id);
+      if (!locked.changes) inputError('Application not found', 404);
+      const application = db.prepare('SELECT * FROM admission_applications WHERE id = ? AND institution_id = ?').get(req.params.id, req.institution_id);
+      checkBranch(req, application);
+      if (application.converted_to_student_id) {
+        return { id: application.converted_to_student_id, already_enrolled: true, message: 'Application already enrolled; no new records created' };
+      }
+      if (application.status !== 'approved') inputError('Approve this application before enrolling the student', 409);
+      const placement = {
+        class_id: req.body.class_id || application.desired_class_id,
+        section_id: req.body.section_id === undefined ? application.desired_section_id : req.body.section_id || null,
+        session_id: req.body.session_id || application.desired_session_id,
+        branch_id: application.branch_id || req.user?.branch_id || null,
+      };
+      if (!placement.class_id || !placement.session_id) inputError('Select a class and academic session before enrollment');
+      validatePlacement(db, req.institution_id!, placement);
+      const parent = db.prepare(`SELECT * FROM application_parents WHERE application_id = ? AND institution_id = ?
+        ORDER BY is_primary DESC, id LIMIT 1`).get(application.id, req.institution_id);
+      if (!parent?.first_name || !parent.phone) inputError('Application needs a parent/guardian name and phone before enrollment');
+      const studentId = generateId();
+      db.prepare(`UPDATE admission_applications SET converted_to_student_id = ?, converted_at = datetime('now'),
+        desired_class_id = ?, desired_section_id = ?, desired_session_id = ?, updated_at = datetime('now')
+        WHERE id = ? AND institution_id = ?`).run(studentId, placement.class_id, placement.section_id || null, placement.session_id, application.id, req.institution_id);
+      const enrollment = createStudentEnrollment({ ...application, ...placement, parent, medical_info: application.medical_conditions }, {
+        institutionId: req.institution_id!, createdBy: req.user?.id, branchId: req.user?.branch_id, studentId,
+      });
+      auditAdmission(db, req, application.id, 'application_enrolled', { student_id: studentId, ...placement, fees_assigned: enrollment.fees_assigned });
+      return enrollment;
+    })();
+    // Credentials are returned once, never retained in the application or replayed.
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.status(result.already_enrolled ? 200 : 201).json(result);
+  } catch (error) { admissionFailure(res, error); }
 });
 
 export default admissionRouter;

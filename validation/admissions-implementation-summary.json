@@ -1,0 +1,21 @@
+{
+  "verifiedAt": "2026-11-10T03:13:50.597Z",
+  "testedPreview": "https://sms-8ywd3r8u8-itconsultantbryant-svgs-projects.vercel.app",
+  "backendAndFrontendTypechecksPassed": true,
+  "unitRegressionTests": { "passed": 31, "failed": 0 },
+  "newAdmissionsTests": { "passed": 7, "failed": 0 },
+  "admissionsBrowserAndNeonChecks": { "passed": 5, "failed": 0 },
+  "offlineRegressionChecks": { "passed": 6, "failed": 0 },
+  "teacherAssignmentRegressionChecks": { "passed": 5, "failed": 0 },
+  "earlierBrowserAttempts": [
+    { "passed": 0, "failed": 1, "reason": "Strict class selector did not resolve before submission" },
+    { "passed": 0, "failed": 1, "reason": "Runner attempted to change the assigned, disabled branch selector before submission" }
+  ],
+  "concurrentNeonEnrollmentVerified": true,
+  "newApplicationWorkflowOnlineOnly": true,
+  "databaseMigrationRequiredForConsolidatedSchema": false,
+  "fullBroadLatestReleaseRerunPerformed": false,
+  "productionDeploymentVerification": "pending",
+  "releaseApproved": false,
+  "details": "ADMISSIONS_IMPLEMENTATION.md"
+}

@@ -33,6 +33,12 @@ The six offline and five teacher-assignment checks documented in `OFFLINE_AND_PR
 
 ## Code and configuration improvements delivered
 
+### Subsequent admissions iteration (November 10)
+
+The core application → review → approval → student enrollment path now uses the active database schema and a real application form/detail route. Conversion creates and links student/guardian accounts and selected-session invoices transactionally, validates school/branch placement and approval/creation authority, audits without credentials, and deduplicates retries/concurrent requests. Direct enrollment also rolls back if billing fails instead of reporting partial success.
+
+Validation: **31 unit/regression tests**, **5 admissions browser/Neon checks**, **6 offline regression checks**, **5 teacher-assignment regression checks**, and backend/frontend type checks passed. Two earlier browser attempts stopped before application submission due to selector handling; their failures are retained in `validation/admissions-implementation-summary.json`. Preview: `https://sms-8ywd3r8u8-itconsultantbryant-svgs-projects.vercel.app`. List-button role visibility was subsequently adjusted and type-checked. No new all-role broad run is claimed. See `ADMISSIONS_IMPLEMENTATION.md` for remaining admissions work and legacy-schema limits. Production deployment verification for this iteration is recorded separately once complete.
+
 1. Fixed backend TypeScript errors and installed the missing frontend PDF dependencies; committed dependency lockfiles for reproducible installation.
 2. Replaced hardcoded/reset-on-start platform administrator passwords with explicit one-time bootstrap. No existing administrator password is overwritten on restart.
 3. Centralized environment loading and required a strong production JWT secret; removed token-prefix logging from the reviewed authentication/client paths.

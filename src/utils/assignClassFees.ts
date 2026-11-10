@@ -52,6 +52,7 @@ export function assignClassFees(opts: {
   structureId?: string | null;
   classId?: string | null;
   studentId?: string | null;
+  sessionId?: string | null;
 }): FeeAssignmentResult {
   const result: FeeAssignmentResult = { students: 0, invoices: 0, items: 0 };
   if (!opts.institutionId) return result;
@@ -69,12 +70,15 @@ export function assignClassFees(opts: {
       AND fs.class_id IS NOT NULL
       AND (? IS NULL OR fs.id = ?)
       AND (? IS NULL OR fs.class_id = ?)
+      AND (? IS NULL OR fs.session_id = ?)
   `).all(
     opts.institutionId,
     opts.structureId || null,
     opts.structureId || null,
     opts.classId || null,
-    opts.classId || null
+    opts.classId || null,
+    opts.sessionId || null,
+    opts.sessionId || null
   ) as any[];
 
   if (!structures.length) return result;

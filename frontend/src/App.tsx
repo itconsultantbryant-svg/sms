@@ -55,6 +55,7 @@ import AdmissionDashboard from './pages/admission/AdmissionDashboard';
 import EnquiriesPage from './pages/admission/EnquiriesPage';
 import EnquiryFormPage from './pages/admission/EnquiryFormPage';
 import ApplicationsPage from './pages/admission/ApplicationsPage';
+import ApplicationPage from './pages/admission/ApplicationPage';
 import RolesPage from './pages/permissions/RolesPage';
 import UserAccessPage from './pages/permissions/UserAccessPage';
 import PasswordRequestsPage from './pages/permissions/PasswordRequestsPage';
@@ -205,7 +206,8 @@ function AppContent() {
                 <Route path="/admission/enquiries/new" element={<EnquiryFormPage />} />
                 <Route path="/admission/enquiries/:id/edit" element={<EnquiryFormPage />} />
                 <Route path="/admission/applications" element={<ApplicationsPage />} />
-                <Route path="/admission/applications/new" element={<EnquiryFormPage />} />
+                <Route path="/admission/applications/new" element={<ApplicationPage />} />
+                <Route path="/admission/applications/:id" element={<ApplicationPage />} />
                   </Routes>
                 </MainLayout>
               </>
