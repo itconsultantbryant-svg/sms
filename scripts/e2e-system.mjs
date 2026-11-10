@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
+import { redactError } from './e2e-redaction.mjs';
 
 // Deliberately opt-in: this creates synthetic schools/users in the selected API.
 // Never run against an existing school's production database.
@@ -14,7 +15,11 @@ const actors = {};
 const run = Date.now().toString(36);
 const password = crypto.randomBytes(20).toString('base64url');
 const resultsDir = process.env.E2E_RESULTS_DIR || 'test-results';
-const fixturePath = `${resultsDir}/fixtures.local.json`;
+const fixturePath = process.env.E2E_FIXTURES || `${resultsDir}/fixtures.local.json`;
+const browserOnly = process.env.E2E_BROWSER_ONLY === 'true';
+const selectedRoles = process.env.E2E_ROLES?.split(',').filter(Boolean);
+const selectedPaths = process.env.E2E_PATHS?.split(',').filter(Boolean);
+if (browserOnly && process.env.E2E_REUSE_FIXTURES !== 'true') throw new Error('Browser-only checks require reusable fixtures');
 fs.mkdirSync(resultsDir, { recursive: true });
 
 async function request(actor, path, method = 'GET', body, expected = 200) {
@@ -41,8 +46,8 @@ async function check(name, fn, kind = 'workflow') {
     console.log(`PASS ${name}`);
     return detail;
   } catch (error) {
-    results.push({ name, kind, status: 'failed', durationMs: Date.now() - started, error: error.message });
-    console.log(`FAIL ${name}: ${error.message}`);
+    results.push({ name, kind, status: 'failed', durationMs: Date.now() - started, error: redactError(error, actors) });
+    console.log(`FAIL ${name}: ${redactError(error, actors)}`);
   }
 }
 async function login(username, pass) {
@@ -112,6 +117,7 @@ try {
   if (!fixture) throw new Error('Fixture creation failed; dependent tests not run');
   const admin = actors.admin;
 
+  if (!browserOnly) {
   await check('Attendance write is visible in student and parent sessions', async () => {
     await request(admin, '/attendance/take', 'POST', { class_id: fixture.classId, session_id: fixture.sessionId, date: new Date().toISOString().slice(0, 10), records: [{ student_id: fixture.studentId, status: 'present' }] }, 201);
     const own = await request(actors.student, '/student-portal/attendance');
@@ -226,12 +232,14 @@ try {
     }
   }
 
+  }
   if (process.env.E2E_API_ONLY !== 'true') {
     const { chromium } = await import(process.env.E2E_PLAYWRIGHT_MODULE || 'playwright');
     const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : { channel: 'chrome' }) });
     try {
       for (const [role, actor] of Object.entries(actors)) {
         if (role === 'otherAdmin') continue;
+        if (selectedRoles && !selectedRoles.includes(role)) continue;
         const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, extraHTTPHeaders: bypass ? { 'x-vercel-protection-bypass': bypass } : {} });
         if (bypass) await context.request.get(`${base}/login`, { headers: { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' } });
         const page = await context.newPage();
@@ -275,18 +283,23 @@ try {
           }
         }
         for (const path of paths) {
+          if (selectedPaths && !selectedPaths.includes(path)) continue;
           errors.length = 0; failures.length = 0;
           await check(`${role}: ${path}`, async () => {
             await page.goto(`${base}${path}`);
             await page.waitForLoadState('networkidle', { timeout: 20000 });
             assert.ok(!page.url().includes('/login'), 'Unexpected logout');
+            await page.waitForFunction(() => {
+              const main = document.querySelector('main');
+              return !!main?.textContent?.trim() && !main.querySelector('.animate-spin, [aria-busy="true"]');
+            }, null, { timeout: 30000 });
             assert.ok((await page.locator('main').innerText()).trim().length > 0, 'Empty main content');
             assert.equal(errors.length, 0, errors.join('; '));
             assert.equal(failures.length, 0, JSON.stringify(failures));
             return { linksDiscovered: links.length };
           }, 'browser');
         }
-        if (role === 'student') {
+        if (role === 'student' && !browserOnly) {
           await check('Student UI automatically refreshes after an administrator attendance edit', async () => {
             await page.goto(`${base}/student/attendance`);
             await page.waitForLoadState('networkidle');
@@ -303,10 +316,13 @@ try {
     } finally { await browser.close(); }
   }
 } catch (error) {
-  results.push({ name: 'Runner/dependent coverage', kind: 'runner', status: 'failed', error: error.message });
-  console.error(error.message);
+  results.push({ name: 'Runner/dependent coverage', kind: 'runner', status: 'failed', error: redactError(error, actors) });
+  console.error(redactError(error, actors));
 } finally {
-  const report = { timestamp: new Date().toISOString(), base, syntheticDataOnly: true, scope: 'Selected write workflows, security probes, static API smoke and role-visible browser routes; not exhaustive business acceptance', results };
+  const scope = browserOnly
+    ? 'API health and selected role-visible browser navigation with reused fixtures; no business write workflows'
+    : 'Selected write workflows, security probes, static API smoke and role-visible browser routes; not exhaustive business acceptance';
+  const report = { timestamp: new Date().toISOString(), base, syntheticDataOnly: true, browserOnly, selectedRoles, selectedPaths, scope, results };
   fs.writeFileSync(`${resultsDir}/system.json`, JSON.stringify(report, null, 2));
   const failed = results.filter(result => result.status === 'failed').length;
   console.log(`Results: ${results.length - failed} passed, ${failed} failed. See ${resultsDir}/system.json (credentials excluded).`);

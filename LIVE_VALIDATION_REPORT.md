@@ -16,6 +16,21 @@ Date: November 9, 2026. Product: `sms` / SVL-SMS. Company: **AfriMind Tech & AI 
 
 **Release disposition:** Protected validation deployment, not an approved unrestricted real-school launch. See remaining limitations below.
 
+## November 10 continuation: offline release verification
+
+- Vercel deployment `dpl_HPLtc1qaysxy2WMEJX5JQq2qBqh1` is **READY**, aliased to `https://sms-alpha-one.vercel.app`. The earlier CLI timeout did not indicate deployment failure.
+- Four production smoke checks passed: unauthenticated deployment protection, healthy Neon API, requested administrator login/platform role, and JavaScript service-worker delivery. Evidence: `validation/production-offline-smoke.json`.
+- Backend/frontend type checks and all **24 unit/regression tests** passed again during this continuation.
+- The latest broad preview run recorded **307 passed, 3 failed**: two premature empty-content assertions and a DNS-interrupted runner. That run remains recorded as interrupted, not as a clean pass.
+- A selective administrator rerun passed **4 checks, 0 failed**, including both `/admission` and `/staff/dashboard`. The browser runner now waits for rendered main content and completion of loading spinners. No application page change was needed.
+- The resumed receptionist/transport-manager/branch-admin run recorded **41 passed, 1 failed**: receptionist and transport-manager navigation completed; branch-admin timed out while filling its login form, before authentication. Its password was successfully redacted in the error trace. A branch-admin-only rerun is tracked separately rather than hiding this failure.
+- The subsequent isolated branch-admin rerun passed **4 checks, 0 failed**: API health, UI login, `/dashboard`, and `/account/password`. All originally interrupted navigation coverage is now completed across selective runs; neither earlier run is retroactively relabeled a clean pass.
+- Preview messaging and backup safety checks passed **3 checks, 0 failed**: SMS/email return explicit provider-required responses; backup returns service-required rather than claiming an artifact exists. Evidence: `validation/unconfigured-integrations-smoke.json`.
+- The deployment-access token printed by the interrupted Playwright trace was revoked/regenerated. Ignored local configuration was updated and the ignored report sanitized. All three E2E runners now redact environment/fixture secrets and sensitive request-header lines; **2 redaction regression checks passed**. Historical conversation/tool traces cannot be rewritten, so revocation is essential.
+- Browser-only fixture reuse and role/path filters allow interrupted navigation checks to resume without repeating state-dependent payment or gradebook mutations. Set `E2E_BROWSER_ONLY=true`, `E2E_REUSE_FIXTURES=true`, `E2E_FIXTURES`, and optional comma-separated `E2E_ROLES`/`E2E_PATHS`.
+
+The six offline and five teacher-assignment checks documented in `OFFLINE_AND_PRD_IMPLEMENTATION.md` remain scoped evidence, not certification of every PRD acceptance path. The continuation's selective reruns comprise 4/0 administrator checks, 41/1 remaining-role checks, and 4/0 isolated branch-admin checks; shared health/login checks must not be summed as unique coverage.
+
 ## Code and configuration improvements delivered
 
 1. Fixed backend TypeScript errors and installed the missing frontend PDF dependencies; committed dependency lockfiles for reproducible installation.

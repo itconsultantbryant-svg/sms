@@ -57,3 +57,11 @@ The latest validation report must identify which checks were actually rerun. The
 - A fresh broad role/dashboard/page rerun is tracked separately; do not substitute the previous release's result for it.
 
 The automation establishes a Vercel protection cookie before installing the service worker. Deployment protection redirects must never be mistaken for API acknowledgements: queued work is removed only after a matching `X-Offline-Acknowledged` ID and a JSON response.
+
+### November 10 continuation
+
+The production deployment that timed out in the CLI was subsequently confirmed READY and serving the production alias. Production protection, administrator login, Neon health, and worker delivery passed four smoke checks. The two administrator pages flagged as empty passed a four-check selective rerun after the runner waited for loading completion. No application page fix was necessary.
+
+An exposed automation access token was rotated/revoked. Browser errors are now redacted before logging/report persistence, with two dedicated regression checks included in hosted CI. The broad runner supports read-only navigation resumption using `E2E_BROWSER_ONLY=true` with reused fixtures and optional role/path filters. This avoids rerunning payment and grading mutations against already-used fixtures. See `LIVE_VALIDATION_REPORT.md` and `validation/offline-implementation-summary.json` for the continuation evidence and remaining limitations.
+
+Receptionist and transport-manager navigation completed in a 41-pass/1-failure selective run; its branch-admin login-form timeout was resolved by a separate 4-pass/0-failure isolated rerun. The original broad run and the first role rerun retain their failures. All interrupted navigation is now covered across runs, not represented as a new single clean broad run. Backend/frontend type checks and the 24-test regression suite passed again.

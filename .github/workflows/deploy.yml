@@ -29,6 +29,7 @@ jobs:
         working-directory: frontend
       - run: npm run typecheck
       - run: npm test
+      - run: node --test scripts/e2e-redaction.test.mjs
       - run: npm run build:backend
       - run: npm run build
         working-directory: frontend

@@ -1,0 +1,12 @@
+{
+  "verifiedAt": "2026-11-10T02:48:01.823Z",
+  "base": "https://sms-alpha-one.vercel.app",
+  "checks": [
+    "Deployment remains authentication-protected",
+    "Production API healthy with Neon",
+    "Requested administrator login and platform role verified",
+    "Production offline service worker served as JavaScript"
+  ],
+  "passed": 4,
+  "failed": 0
+}

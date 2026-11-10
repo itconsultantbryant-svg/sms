@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { redactError } from './e2e-redaction.mjs';
 
 if (!process.env.E2E_BASE_URL || process.env.E2E_ALLOW_WRITES !== 'true') throw new Error('An isolated test deployment and E2E_ALLOW_WRITES=true are required');
 const base = process.env.E2E_BASE_URL;
@@ -85,7 +86,7 @@ try {
   await context.close();
   console.log(checks.map(check => `PASS ${check}`).join('\n'));
 } catch (error) {
-  console.error(error.message); process.exitCode = 1;
+  console.error(redactError(error, actors)); process.exitCode = 1;
 } finally {
   await browser.close();
   fs.mkdirSync('test-results/offline', { recursive: true });

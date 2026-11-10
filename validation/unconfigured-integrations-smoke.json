@@ -1,0 +1,23 @@
+{
+  "verifiedAt": "2026-11-10T02:49:02.904Z",
+  "base": "https://sms-9e0zltztg-itconsultantbryant-svgs-projects.vercel.app",
+  "results": [
+    {
+      "path": "/communication/sms",
+      "status": 503,
+      "code": "SMS_PROVIDER_REQUIRED"
+    },
+    {
+      "path": "/communication/emails",
+      "status": 503,
+      "code": "EMAIL_PROVIDER_REQUIRED"
+    },
+    {
+      "path": "/reports/backup",
+      "status": 501,
+      "code": "BACKUP_SERVICE_REQUIRED"
+    }
+  ],
+  "passed": 3,
+  "failed": 0
+}

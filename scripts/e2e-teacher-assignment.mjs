@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
+import { redactError } from './e2e-redaction.mjs';
 
 if (!process.env.E2E_BASE_URL || process.env.E2E_ALLOW_WRITES !== 'true') throw new Error('Use an isolated test deployment with E2E_ALLOW_WRITES=true');
 const base = process.env.E2E_BASE_URL;
@@ -57,7 +58,7 @@ try {
   checks.push('Reconnection synchronizes the assignment and refreshes the form without duplicates');
   await context.close();
   console.log(checks.map(check => `PASS ${check}`).join('\n'));
-} catch (error) { console.error(error.message); process.exitCode=1; }
+} catch (error) { console.error(redactError(error, actors)); process.exitCode=1; }
 finally {
   await browser.close(); fs.mkdirSync('test-results/teacher-assignment', { recursive: true });
   fs.writeFileSync('test-results/teacher-assignment/results.json', JSON.stringify({ completedAt: new Date().toISOString(), base, passedChecks: checks, failed: !!process.exitCode }, null, 2));
