@@ -15,7 +15,11 @@
   "newApplicationWorkflowOnlineOnly": true,
   "databaseMigrationRequiredForConsolidatedSchema": false,
   "fullBroadLatestReleaseRerunPerformed": false,
-  "productionDeploymentVerification": "pending",
+  "productionDeploymentVerification": "passed",
+  "productionDeployment": "sms-78lsk2mm0-itconsultantbryant-svgs-projects.vercel.app",
+  "productionAlias": "https://sms-alpha-one.vercel.app",
+  "productionSmoke": { "passed": 6, "failed": 0, "evidence": "validation/production-admissions-smoke.json" },
+  "productionBusinessRecordsCreatedForSmoke": 0,
   "releaseApproved": false,
   "details": "ADMISSIONS_IMPLEMENTATION.md"
 }

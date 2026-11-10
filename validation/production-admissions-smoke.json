@@ -1,0 +1,17 @@
+{
+  "verifiedAt": "2026-11-10T03:21:17.875Z",
+  "base": "https://sms-alpha-one.vercel.app",
+  "deployment": "sms-78lsk2mm0-itconsultantbryant-svgs-projects.vercel.app",
+  "applicationCommit": "76503bc",
+  "checks": [
+    "Production remains authentication-protected",
+    "Production API healthy with Neon",
+    "Requested administrator login and platform role preserved",
+    "New admissions detail route executes canonical production schema",
+    "Production service worker served as JavaScript",
+    "Production New Application renders the real form without submitting records"
+  ],
+  "passed": 6,
+  "failed": 0,
+  "productionBusinessRecordsCreated": 0
+}
