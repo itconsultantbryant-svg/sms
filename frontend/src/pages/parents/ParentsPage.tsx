@@ -5,6 +5,10 @@ import api from '../../utils/api';
 import { PaginatedResponse, Parent } from '../../types';
 import RecordView from '../../components/common/RecordView';
 import RecordActions from '../../components/common/RecordActions';
+import { Link } from 'react-router-dom';
+import PasswordReset from '../../components/common/PasswordReset';
+import { fieldsFromRecord } from '../../components/common/RecordView';
+import { RecordFeedback } from '../../components/common/RecordDialog';
 
 export default function ParentsPage() {
   const [page, setPage] = useState(1);
@@ -16,7 +20,7 @@ export default function ParentsPage() {
     queryFn: () => api.get('/parents', { params: { page, limit: 20, search } }).then(r => r.data),
   });
 
-  const { data: viewed } = useQuery<any>({
+  const { data: viewed, error: viewError } = useQuery<any>({
     queryKey: ['parent-view', viewId],
     queryFn: () => api.get(`/parents/${viewId}`).then((r) => r.data),
     enabled: !!viewId,
@@ -77,13 +81,8 @@ export default function ParentsPage() {
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <button type="button" className="text-primary-600 text-sm" onClick={() => setViewId(parent.id)}>View</button>
-                        <RecordActions resource="parents" id={parent.id} label={`${parent.first_name} ${parent.last_name}`} invalidate={['parents']} fields={[
-                          { key: 'first_name', label: 'First name' },
-                          { key: 'last_name', label: 'Last name' },
-                          { key: 'phone', label: 'Phone' },
-                          { key: 'email', label: 'Email' },
-                          { key: 'occupation', label: 'Occupation' },
-                        ]} record={parent} />
+                        <Link className="text-primary-600" to={`/parents/${parent.id}/edit`}>Edit</Link>
+                        <RecordActions resource="parents" id={parent.id} label={`${parent.first_name} ${parent.last_name}`} invalidate={['parents']} />
                       </div>
                     </td>
                   </tr>
@@ -103,19 +102,21 @@ export default function ParentsPage() {
           </div>
         )}
       </div>
+      {viewId && !viewed && <RecordFeedback title="Parent profile" error={viewError} onClose={() => setViewId(null)} />}
       {viewed && viewId && (
         <RecordView
           title={`${viewed.first_name || ''} ${viewed.last_name || ''}`.trim() || 'Parent'}
+          subtitle={`Parent / guardian · ${viewed.children?.length || 0} linked students`}
+          photo={viewed.photo}
+          actions={<Link className="btn-primary" to={`/parents/${viewId}/edit`}>Edit parent details</Link>}
           onClose={() => setViewId(null)}
-          fields={[
-            { label: 'Relationship', value: viewed.relationship },
-            { label: 'Phone', value: viewed.phone },
-            { label: 'Email', value: viewed.email },
-            { label: 'Occupation', value: viewed.occupation },
-            { label: 'Address', value: viewed.address },
-            { label: 'Children', value: viewed.children },
-          ]}
-        />
+          sections={[
+            { title: 'Personal and contact information', fields: fieldsFromRecord(viewed, { first_name: 'First name', last_name: 'Last name', relationship: 'Relationship', phone: 'Phone', email: 'Email', address: 'Address' }) },
+            { title: 'Occupation and workplace', fields: fieldsFromRecord(viewed, { occupation: 'Occupation', workplace: 'Workplace' }) },
+            { title: 'Linked students', fields: [{ label: 'Children', value: viewed.children }] },
+          ]}>
+          <PasswordReset key={viewId} resource="parents" id={viewId} username={viewed.username} />
+        </RecordView>
       )}
     </div>
   );

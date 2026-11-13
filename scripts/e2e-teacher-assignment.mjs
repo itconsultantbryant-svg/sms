@@ -24,7 +24,7 @@ try {
   for (const name of subjectNames) subjects.push(await call('/academics/subjects', 'POST', { name }, 201));
   await call('/academics/class-subjects', 'POST', { class_id: cls.id, subject_ids: subjects.map(row => row.id), session_id: fixture.sessionId }, 201);
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-vercel-protection-bypass': secret } });
-  await context.request.get(base+'/login', { headers: { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' } });
+  await context.request.get(base+'/login', { maxRedirects: 0, headers: { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' } });
   const page = await context.newPage();
   await page.goto(base+'/login');
   await page.getByPlaceholder('Username, email, or Student ID').fill(actors.admin.username);

@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-11-13T13:49:05.957Z",
+  "testedPreview": "https://sms-aumnnsb94-itconsultantbryant-svgs-projects.vercel.app",
+  "backendAndFrontendTypechecksPassed": true,
+  "unitRegressionTests": { "passed": 39, "failed": 0 },
+  "profilePasswordTestsIncluded": { "passed": 8, "failed": 0 },
+  "profileBrowserApiChecks": { "passed": 7, "failed": 0 },
+  "earlierAttempts": [
+    { "passed": 0, "failed": 1, "reason": "Preview protection-cookie request timed out before application checks" },
+    { "passed": 3, "failed": 1, "reason": "Mobile sidebar obstructed the View button; responsive layout subsequently fixed" }
+  ],
+  "authVersionMigrationApplied": ["production", "preview", "development"],
+  "passwordResetRoles": ["platform_admin", "institution_admin", "registrar"],
+  "passwordResetTargets": ["student", "parent", "teacher"],
+  "previousOnlineSessionsRejectedAfterReset": true,
+  "disconnectedDevicesReceiveResetOnlyAfterReconnect": true,
+  "existingProductionPortalPasswordsChangedByTesting": false,
+  "sharedRecordViewsStandardized": true,
+  "exhaustiveAllModuleAcceptancePerformed": false,
+  "productionDeploymentVerification": "pending",
+  "details": "PROFILE_DETAILS_AND_PASSWORDS.md"
+}

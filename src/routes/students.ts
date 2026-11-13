@@ -7,6 +7,7 @@ import { injectTenant, requireTenant } from '../middleware/tenant';
 import { generateId, generateAdmissionNumber, generateDefaultPassword, paginate, buildSearchQuery } from '../utils/helpers';
 import { ensureUserRole, ensurePortalRole } from '../utils/userAccess';
 import { assignClassFees } from '../utils/assignClassFees';
+import { scopedProfile, updateProfileFields, syncProfileAccount, validateStudentPlacement, saveGuardian, profileFailure, profileError, resetProfilePassword } from '../utils/profileRecords';
 
 export const studentsRouter = Router();
 
@@ -77,6 +78,7 @@ studentsRouter.get('/:id', (req: AuthRequest, res: Response) => {
     res.status(404).json({ error: 'Student not found' });
     return;
   }
+  if (req.user?.branch_id && student.branch_id !== req.user.branch_id) { res.status(404).json({ error: 'Student not found in your branch' }); return; }
 
   // TENANT ISOLATION: Filter related data (platform admins see all)
   const parentInstitutionFilter = req.institution_id ? `AND p.institution_id = '${req.institution_id}'` : '';
@@ -110,6 +112,7 @@ studentsRouter.get('/:id', (req: AuthRequest, res: Response) => {
 
   res.json({
     ...student,
+    username: student.user_id ? (db.prepare('SELECT username FROM users WHERE id = ? AND institution_id = ?').get(student.user_id, student.institution_id) as any)?.username : null,
     parents,
     documents,
     prior_records: priorRecords,
@@ -327,8 +330,8 @@ export function createStudentEnrollment(body: any, context: {
       const parentPassword = generateDefaultPassword();
       // TENANT ISOLATION: Include institution_id for parent
       db.prepare(`
-        INSERT INTO parents (id, institution_id, first_name, last_name, relationship, phone, email, address, occupation)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO parents (id, institution_id, first_name, last_name, relationship, phone, email, address, occupation, workplace)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         parentId,
         context.institutionId,
@@ -338,7 +341,8 @@ export function createStudentEnrollment(body: any, context: {
         emptyToNull(parent.phone),
         emptyToNull(parent.email),
         emptyToNull(parent.address),
-        parent.occupation || null
+        parent.occupation || null,
+        parent.workplace || null
       );
       db.prepare('INSERT INTO student_parents (student_id, parent_id, is_primary) VALUES (?, ?, 1)').run(id, parentId);
 
@@ -435,71 +439,50 @@ export function createStudentEnrollment(body: any, context: {
 }
 
 studentsRouter.put('/:id', requirePermission('students.edit'), (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
-  const {
-    first_name, middle_name, last_name, date_of_birth, gender, nationality,
-    county, address, phone, email, photo, blood_group, medical_info,
-    class_id, section_id, session_id, status
-  } = req.body;
-
   const db = getDatabase();
-
-  // TENANT ISOLATION: Check student belongs to this institution (platform admins see all)
-  const institutionFilter = req.institution_id ? `AND institution_id = '${req.institution_id}'` : '';
-  const student = db.prepare(
-    `SELECT id FROM students WHERE id = ? ${institutionFilter}`
-  ).get(id);
-
-  if (!student) {
-    res.status(404).json({ error: 'Student not found' });
-    return;
-  }
-
-  db.prepare(`
-    UPDATE students SET
-    first_name = COALESCE(?, first_name), middle_name = COALESCE(?, middle_name),
-    last_name = COALESCE(?, last_name), date_of_birth = COALESCE(?, date_of_birth),
-    gender = COALESCE(?, gender), nationality = COALESCE(?, nationality),
-    county = COALESCE(?, county), address = COALESCE(?, address),
-    phone = COALESCE(?, phone), email = COALESCE(?, email),
-    photo = COALESCE(?, photo), blood_group = COALESCE(?, blood_group),
-    medical_info = COALESCE(?, medical_info), class_id = COALESCE(?, class_id),
-    section_id = COALESCE(?, section_id), session_id = COALESCE(?, session_id),
-    status = COALESCE(?, status), updated_at = datetime('now')
-    WHERE id = ?
-  `).run(
-    first_name, middle_name, last_name, date_of_birth, gender, nationality,
-    county, address, phone, email, photo, blood_group, medical_info,
-    class_id, section_id, session_id, status, id
-  );
-
-  // Keep linked user avatar/name in sync when photo/name changes
-  if (photo || first_name || last_name) {
-    db.prepare(`
-      UPDATE users SET
-        avatar = COALESCE(?, avatar),
-        first_name = COALESCE(?, first_name),
-        last_name = COALESCE(?, last_name),
-        updated_at = datetime('now')
-      WHERE linked_entity_type = 'student' AND linked_entity_id = ?
-    `).run(photo || null, first_name || null, last_name || null, id);
-  }
-
-  if (req.institution_id && class_id) {
-    try {
+  try {
+    const result = db.transaction(() => {
+      const student = scopedProfile(db, req, 'students', req.params.id);
+      const fields = ['first_name', 'middle_name', 'last_name', 'date_of_birth', 'gender', 'nationality', 'county', 'address',
+        'phone', 'email', 'photo', 'blood_group', 'medical_info', 'previous_school', 'previous_class', 'admission_date',
+        'branch_id', 'class_id', 'section_id', 'session_id', 'status'];
+      const next = { ...student, ...Object.fromEntries(fields.filter(key => Object.prototype.hasOwnProperty.call(req.body, key)).map(key => [key, req.body[key] || null])) };
+      validateStudentPlacement(db, req, next);
+      if (req.body.status && !['active', 'inactive', 'graduated', 'transferred', 'withdrawn', 'suspended', 'deceased'].includes(req.body.status)) profileError('Invalid student status');
+      updateProfileFields(db, 'students', student.id, req.institution_id!, req.body, fields);
+      db.prepare('UPDATE students SET is_active = ? WHERE id = ? AND institution_id = ?').run(next.status === 'active' ? 1 : 0, student.id, req.institution_id);
+      syncProfileAccount(db, 'students', student.id, req.institution_id!, student.email);
+      let parentCredentials;
+      if (req.body.parent?.first_name || req.body.parent?.id) parentCredentials = saveGuardian(db, req, req.body.parent, student.id);
+      for (const record of req.body.prior_records || []) {
+        if (!['previous_gradesheet', 'transfer_transcript', 'prior_class', 'other'].includes(record.record_type)) profileError('Invalid prior record type');
+        if (record.id) {
+          if (!db.prepare('SELECT id FROM student_prior_records WHERE id = ? AND student_id = ? AND institution_id = ?').get(record.id, student.id, req.institution_id)) profileError('Prior record not found', 404);
+          // An omitted file preserves the existing attachment.
+          const keys = ['record_type', 'title', 'notes', 'school_name', 'class_name', 'session_name', 'file_data', 'file_name', 'mime_type'].filter(key => Object.prototype.hasOwnProperty.call(record, key));
+          db.prepare(`UPDATE student_prior_records SET ${keys.map(key => `${key} = ?`).join(', ')} WHERE id = ? AND student_id = ? AND institution_id = ?`).run(...keys.map(key => record[key] || null), record.id, student.id, req.institution_id);
+        } else {
+          db.prepare(`INSERT INTO student_prior_records (id, institution_id, student_id, record_type, title, notes, school_name, class_name,
+            session_name, file_data, file_name, mime_type, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            generateId(), req.institution_id, student.id, record.record_type, record.title || null, record.notes || null,
+            record.school_name || next.previous_school || null, record.class_name || next.previous_class || null, record.session_name || null,
+            record.file_data || null, record.file_name || null, record.mime_type || null, req.user?.id || null);
+        }
+      }
+      if (next.class_id && (next.class_id !== student.class_id || next.session_id !== student.session_id)) {
       assignClassFees({
-        institutionId: req.institution_id,
+        institutionId: req.institution_id!,
         createdBy: req.user?.id,
-        studentId: id,
-        classId: class_id,
+        studentId: student.id, classId: next.class_id, sessionId: next.session_id,
       });
-    } catch (err) {
-      console.error('Could not assign class fees after student update:', err);
-    }
-  }
-
-  res.json({ message: 'Student updated successfully' });
+      }
+      return { message: 'Student and guardian details updated successfully', parent_credentials: parentCredentials };
+    })();
+    res.json(result);
+  } catch (error) { profileFailure(res, error); }
 });
+
+studentsRouter.post('/:id/reset-password', authorize('platform_admin', 'institution_admin', 'registrar'), resetProfilePassword('students'));
 
 studentsRouter.delete('/:id', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   if (!req.institution_id) {

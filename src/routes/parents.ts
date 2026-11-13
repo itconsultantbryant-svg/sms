@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDatabase } from '../database/init';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, authorize } from '../middleware/auth';
 import { injectTenant, requireTenant } from '../middleware/tenant';
 import { generateId, generateDefaultPassword, paginate, buildSearchQuery } from '../utils/helpers';
 import { ensureUserRole, ensurePortalRole } from '../utils/userAccess';
+import { scopedProfile, updateProfileFields, syncProfileAccount, parentFields, profileFailure, resetProfilePassword } from '../utils/profileRecords';
 
 export const parentsRouter = Router();
 
@@ -63,7 +64,8 @@ parentsRouter.get('/:id', (req: AuthRequest, res: Response) => {
     WHERE sp.parent_id = ? ${childInstitutionFilter}
   `).all(id);
 
-  res.json({ ...parent, children });
+  try { scopedProfile(db, req, 'parents', id); } catch (error) { profileFailure(res, error); return; }
+  res.json({ ...parent, children, username: parent.user_id ? db.prepare('SELECT username FROM users WHERE id = ? AND institution_id = ?').get(parent.user_id, parent.institution_id)?.username : null });
 });
 
 parentsRouter.post('/', (req: AuthRequest, res: Response) => {
@@ -138,30 +140,20 @@ parentsRouter.post('/', (req: AuthRequest, res: Response) => {
   });
 });
 
-parentsRouter.put('/:id', (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
-  const { first_name, last_name, relationship, phone, email, address, occupation, workplace } = req.body;
-
+parentsRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'registrar'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  // TENANT ISOLATION: Check parent belongs to this institution (platform admins see all)
-  const putInstitutionFilter = req.institution_id ? `AND institution_id = '${req.institution_id}'` : '';
-  const parent = db.prepare(`SELECT id FROM parents WHERE id = ? ${putInstitutionFilter}`).get(id);
-  if (!parent) {
-    res.status(404).json({ error: 'Parent not found' });
-    return;
-  }
-
-  db.prepare(`
-    UPDATE parents SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name),
-    relationship = COALESCE(?, relationship), phone = COALESCE(?, phone),
-    email = COALESCE(?, email), address = COALESCE(?, address),
-    occupation = COALESCE(?, occupation), workplace = COALESCE(?, workplace),
-    updated_at = datetime('now')
-    WHERE id = ?
-  `).run(first_name, last_name, relationship, phone, email, address, occupation, workplace, id);
-
-  res.json({ message: 'Parent updated successfully' });
+  try {
+    db.transaction(() => {
+      const parent = scopedProfile(db, req, 'parents', req.params.id);
+      updateProfileFields(db, 'parents', parent.id, req.institution_id!, req.body, parentFields);
+      syncProfileAccount(db, 'parents', parent.id, req.institution_id!, parent.email);
+      if (req.body.relationship && parent.user_id) db.prepare('UPDATE parent_students SET relationship = ? WHERE parent_id = ? AND institution_id = ?').run(req.body.relationship, parent.user_id, req.institution_id);
+    })();
+    res.json({ message: 'Parent updated successfully' });
+  } catch (error) { profileFailure(res, error); }
 });
+
+parentsRouter.post('/:id/reset-password', authorize('platform_admin', 'institution_admin', 'registrar'), resetProfilePassword('parents'));
 
 parentsRouter.post('/:id/link-student', (req: AuthRequest, res: Response) => {
   const { id } = req.params;

@@ -4,11 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { Branch, Department, Designation } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import PasswordReset from '../../components/common/PasswordReset';
 
 export default function TeacherFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
+  const { user } = useAuth();
+  const canEditFinance = ['platform_admin', 'institution_admin', 'hr_manager'].some(role => user?.user_type === role || user?.role_codes?.includes(role));
+  const [recordLoading, setRecordLoading] = useState(!!id);
+  const [recordError, setRecordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
@@ -76,8 +82,8 @@ export default function TeacherFormPage() {
   useEffect(() => {
     if (id) {
       api.get(`/teachers/${id}`).then(res => {
-        setForm(prev => ({ ...prev, ...res.data, basic_salary: res.data.basic_salary?.toString() || '' }));
-      });
+        setForm(prev => ({ ...prev, ...Object.fromEntries(Object.keys(prev).filter(key => key !== 'generate_credentials').map(key => [key, res.data[key] ?? ''])), basic_salary: res.data.basic_salary?.toString() || '' }));
+      }).catch(e => setRecordError(e.response?.data?.error || 'Could not load teacher record')).finally(() => setRecordLoading(false));
     }
   }, [id]);
 
@@ -93,7 +99,8 @@ export default function TeacherFormPage() {
     }
     setLoading(true);
     try {
-      const payload = { ...form, basic_salary: parseFloat(form.basic_salary) || 0, generate_credentials: true };
+      const payload: any = { ...form, basic_salary: parseFloat(form.basic_salary) || 0, generate_credentials: true };
+      if (!canEditFinance) { delete payload.basic_salary; delete payload.bank_name; delete payload.bank_account; }
       if (isEdit) {
         await api.put(`/teachers/${id}`, payload);
         toast.success('Teacher updated successfully');
@@ -140,6 +147,8 @@ export default function TeacherFormPage() {
       </div>
     );
   }
+  if (recordLoading) return <p role="status" className="p-8">Loading complete teacher record…</p>;
+  if (recordError) return <p role="alert" className="p-8 text-red-700">{recordError}</p>;
 
   return (
     <div className="space-y-6">
@@ -160,6 +169,7 @@ export default function TeacherFormPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Profile photo</label>
               <input type="file" accept="image/*" onChange={(e) => onPhoto(e.target.files?.[0] || null)} />
+              {form.photo && <button type="button" className="ml-3 text-sm text-red-700" onClick={() => setForm(prev => ({ ...prev, photo: '' }))}>Remove photo</button>}
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -181,6 +191,7 @@ export default function TeacherFormPage() {
                 <option value="">Select</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
+                <option value="other">Other</option>
               </select>
             </div>
             <div>
@@ -247,14 +258,14 @@ export default function TeacherFormPage() {
                 <option value="temporary">Temporary</option>
               </select>
             </div>
-            <div>
+            {canEditFinance && <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Basic Salary ($)</label>
               <input name="basic_salary" type="number" value={form.basic_salary} onChange={handleChange} className="input-field" />
-            </div>
+            </div>}
           </div>
         </div>
 
-        <div className="card">
+        {canEditFinance && <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Bank Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -266,7 +277,7 @@ export default function TeacherFormPage() {
               <input name="bank_account" value={form.bank_account} onChange={handleChange} className="input-field" />
             </div>
           </div>
-        </div>
+        </div>}
 
         {isEdit && (
           <div className="card space-y-3">
@@ -344,6 +355,7 @@ export default function TeacherFormPage() {
           </button>
         </div>
       </form>
+      {isEdit && <PasswordReset key={id} resource="teachers" id={id!} username={teacherRecord?.username} />}
     </div>
   );
 }

@@ -4,6 +4,8 @@ Date: November 9, 2026. Product: `sms` / SVL-SMS. Company: **AfriMind Tech & AI 
 
 ## Deployment outcome
 
+**Current production access (November 13):** At the user's request, Vercel Authentication was changed from all deployments to `prod_deployment_urls_and_all_previews`. The canonical production alias `https://sms-alpha-one.vercel.app` opens the application's login in fresh desktop/mobile browser sessions without a Vercel account or bypass cookie. Preview/generated deployment URLs remain protected; the application's own authentication remains enforced. Earlier observations below that production itself required Vercel authentication are historical.
+
 - Existing Git history preserved and pushed to `https://github.com/itconsultantbryant-svg/sms`, branch `main`. Old remote retained locally as `legacy-origin`.
 - New, isolated Neon project `sms` (`aged-cloud-64581443`), database `sms`, PostgreSQL 17, AWS Frankfurt, provisioned using the Neon CLI.
 - Separate main/production, preview, and development branches initialized successfully. Original workspace/deployed school databases were not migrated or overwritten.
@@ -32,6 +34,14 @@ Date: November 9, 2026. Product: `sms` / SVL-SMS. Company: **AfriMind Tech & AI 
 The six offline and five teacher-assignment checks documented in `OFFLINE_AND_PRD_IMPLEMENTATION.md` remain scoped evidence, not certification of every PRD acceptance path. The continuation's selective reruns comprise 4/0 administrator checks, 41/1 remaining-role checks, and 4/0 isolated branch-admin checks; shared health/login checks must not be summed as unique coverage.
 
 ## Code and configuration improvements delivered
+
+### Profile editing, standardized views and password administration (November 13)
+
+Student edit now saves the complete admission details, guardian information and prior-record updates atomically; teacher employment fields and full parent profiles/photos are editable and synchronized with linked accounts. Student/parent/teacher views share a photo-first structured layout, and the common record-view component is standardized across its module consumers. A mobile sidebar obstruction discovered in browser testing was fixed in the shared layout.
+
+Administrators and registrars have record-scoped password reset controls for students, parents and teachers. New passwords work immediately; earlier online tokens are rejected using migrated account authentication versions, and pending password-change requests are superseded. Reset audits do not contain passwords. Offline devices learn about revocation only when reconnecting. Registrar profile/reset access does not confer salary/bank privileges.
+
+Evidence: **39 regression tests**, backend/frontend type checks, and **7 targeted desktop/mobile/browser/API checks** passed against `sms-aumnnsb94-itconsultantbryant-svgs-projects.vercel.app`. Earlier timeout/mobile-obstruction failures remain documented in `validation/profile-details-summary.json`. No new exhaustive all-module acceptance run is claimed. Details and migration requirements: `PROFILE_DETAILS_AND_PASSWORDS.md`. Production publication verification follows separately.
 
 ### Subsequent admissions iteration (November 10)
 

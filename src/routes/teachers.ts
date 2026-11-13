@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import { getDatabase } from '../database/init';
-import { AuthRequest, authorize } from '../middleware/auth';
+import { AuthRequest, authorize, hasPermission } from '../middleware/auth';
 import { injectTenant, requireTenant } from '../middleware/tenant';
 import { generateId, generateEmployeeId, generateDefaultPassword, paginate, buildSearchQuery } from '../utils/helpers';
 import { ensureUserRole, ensurePortalRole } from '../utils/userAccess';
 import bcrypt from 'bcryptjs';
+import { scopedProfile, updateProfileFields, syncProfileAccount, profileFailure, profileError, resetProfilePassword } from '../utils/profileRecords';
 
 export const teachersRouter = Router();
 
@@ -15,6 +16,15 @@ teachersRouter.use(requireTenant);
 function validEmployeeLinks(db: any, institution: string, values: Record<string, any>): boolean {
   return [['branch_id', 'branches'], ['department_id', 'departments'], ['designation_id', 'designations']].every(([field, table]) =>
     !values[field] || !!db.prepare(`SELECT id FROM ${table} WHERE id = ? AND institution_id = ?`).get(values[field], institution));
+}
+
+function employeeFinanceAllowed(req: AuthRequest) {
+  return ['platform_admin', 'institution_admin'].includes(req.user?.user_type || '') || req.user?.role_codes?.includes('hr_manager') || req.user?.role_code === 'hr_manager' || hasPermission(req, 'payroll.view');
+}
+function employeeResponse(req: AuthRequest, row: any) {
+  if (employeeFinanceAllowed(req)) return row;
+  const { basic_salary, bank_name, bank_account, ...profile } = row;
+  return profile;
 }
 
 teachersRouter.get('/', (req: AuthRequest, res: Response) => {
@@ -49,7 +59,7 @@ teachersRouter.get('/', (req: AuthRequest, res: Response) => {
     LIMIT ? OFFSET ?
   `).all(...params, lim, offset);
 
-  res.json({ data: teachers, total: total.count, page: parseInt(page), limit: lim });
+  res.json({ data: teachers.map((row: any) => employeeResponse(req, row)), total: total.count, page: parseInt(page), limit: lim });
 });
 
 teachersRouter.get('/:id', (req: AuthRequest, res: Response) => {
@@ -71,6 +81,7 @@ teachersRouter.get('/:id', (req: AuthRequest, res: Response) => {
     res.status(404).json({ error: 'Teacher not found' });
     return;
   }
+  if (req.user?.branch_id && teacher.branch_id !== req.user.branch_id) { res.status(404).json({ error: 'Teacher not found in your branch' }); return; }
 
   // TENANT ISOLATION: Filter assignments through employee (null for platform admins)
   const assignmentInstFilter = req.institution_id ? `AND ta.institution_id = '${req.institution_id}'` : '';
@@ -85,7 +96,8 @@ teachersRouter.get('/:id', (req: AuthRequest, res: Response) => {
     WHERE ta.employee_id = ? ${assignmentInstFilter}
   `).all(id);
 
-  res.json({ ...teacher, assignments });
+  res.json({ ...employeeResponse(req, teacher), assignments,
+    username: teacher.user_id ? db.prepare('SELECT username FROM users WHERE id = ? AND institution_id = ?').get(teacher.user_id, teacher.institution_id)?.username : null });
 });
 
 teachersRouter.post('/', authorize('platform_admin', 'institution_admin', 'hr_manager'), (req: AuthRequest, res: Response) => {
@@ -189,59 +201,29 @@ teachersRouter.post('/', authorize('platform_admin', 'institution_admin', 'hr_ma
   }
 });
 
-teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_manager'), (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
-  const {
-    first_name, middle_name, last_name, gender, date_of_birth, phone, email,
-    address, photo, department_id, designation_id, branch_id, qualification, experience,
-    employment_type, basic_salary, bank_name, bank_account, is_active
-  } = req.body;
-
+teachersRouter.put('/:id', authorize('platform_admin', 'institution_admin', 'hr_manager', 'registrar'), (req: AuthRequest, res: Response) => {
   const db = getDatabase();
-  // TENANT ISOLATION: Check teacher belongs to this institution (null for platform admins)
-  const instFilter = req.institution_id ? `AND institution_id = '${req.institution_id}'` : '';
-  const teacher = db.prepare(`SELECT id FROM employees WHERE id = ? ${instFilter} AND is_teacher = 1`).get(id);
-  if (!teacher) {
-    res.status(404).json({ error: 'Teacher not found' });
-    return;
-  }
-  if (!validEmployeeLinks(db, req.institution_id, { branch_id, department_id, designation_id })) {
-    res.status(400).json({ error: 'Branch, department and designation must belong to this school' }); return;
-  }
-
-  db.prepare(`
-    UPDATE employees SET
-    first_name = COALESCE(?, first_name), middle_name = COALESCE(?, middle_name),
-    last_name = COALESCE(?, last_name), gender = COALESCE(?, gender),
-    date_of_birth = COALESCE(?, date_of_birth), phone = COALESCE(?, phone),
-    email = COALESCE(?, email), address = COALESCE(?, address),
-    photo = COALESCE(?, photo), department_id = COALESCE(?, department_id),
-    designation_id = COALESCE(?, designation_id), branch_id = COALESCE(?, branch_id), qualification = COALESCE(?, qualification),
-    experience = COALESCE(?, experience), employment_type = COALESCE(?, employment_type),
-    basic_salary = COALESCE(?, basic_salary), bank_name = COALESCE(?, bank_name),
-    bank_account = COALESCE(?, bank_account), is_active = COALESCE(?, is_active),
-    updated_at = datetime('now')
-    WHERE id = ?
-  `).run(
-    first_name, middle_name, last_name, gender, date_of_birth, phone, email,
-    address, photo, department_id || null, designation_id || null, branch_id || null, qualification, experience,
-    employment_type, basic_salary, bank_name, bank_account, is_active, id
-  );
-  if (branch_id) db.prepare(`UPDATE users SET branch_id = ? WHERE institution_id = ? AND linked_entity_type = 'employee' AND linked_entity_id = ?`).run(branch_id, req.institution_id, id);
-
-  if (photo || first_name || last_name) {
-    db.prepare(`
-      UPDATE users SET
-        avatar = COALESCE(?, avatar),
-        first_name = COALESCE(?, first_name),
-        last_name = COALESCE(?, last_name),
-        updated_at = datetime('now')
-      WHERE linked_entity_type = 'employee' AND linked_entity_id = ?
-    `).run(photo || null, first_name || null, last_name || null, id);
-  }
-
-  res.json({ message: 'Teacher updated successfully' });
+  try {
+    db.transaction(() => {
+      const teacher = scopedProfile(db, req, 'employees', req.params.id);
+      if (!teacher.is_teacher) profileError('Teacher not found', 404);
+      const next = { ...teacher, ...req.body };
+      if (!validEmployeeLinks(db, req.institution_id!, next)) profileError('Branch, department and designation must belong to this school');
+      if (req.user?.branch_id && next.branch_id !== req.user.branch_id) profileError('Use your assigned branch', 403);
+      if (req.body.basic_salary != null && (!Number.isFinite(Number(req.body.basic_salary)) || Number(req.body.basic_salary) < 0)) profileError('Salary must be a non-negative number');
+      const finance = ['basic_salary', 'bank_name', 'bank_account'];
+      const canEditFinance = ['platform_admin', 'institution_admin'].includes(req.user?.user_type || '') || req.user?.role_code === 'hr_manager' || req.user?.role_codes?.includes('hr_manager');
+      if (!canEditFinance && finance.some(key => Object.prototype.hasOwnProperty.call(req.body, key))) profileError('HR authorization is required to edit salary or bank details', 403);
+      updateProfileFields(db, 'employees', teacher.id, req.institution_id!, req.body, ['first_name', 'middle_name', 'last_name', 'gender',
+        'date_of_birth', 'phone', 'email', 'address', 'photo', 'department_id', 'designation_id', 'branch_id', 'qualification', 'experience',
+        'employment_date', 'employment_type', 'is_active', ...finance]);
+      syncProfileAccount(db, 'employees', teacher.id, req.institution_id!, teacher.email);
+    })();
+    res.json({ message: 'Teacher updated successfully' });
+  } catch (error) { profileFailure(res, error); }
 });
+
+teachersRouter.post('/:id/reset-password', authorize('platform_admin', 'institution_admin', 'registrar'), resetProfilePassword('employees'));
 
 teachersRouter.post('/:id/assignments', authorize('platform_admin', 'institution_admin'), (req: AuthRequest, res: Response) => {
   const { id } = req.params;

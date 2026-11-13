@@ -1,16 +1,23 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { Class, Section, Branch, AcademicSession } from '../../types';
+import PasswordReset from '../../components/common/PasswordReset';
 
 export default function StudentFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState('');
+  const [recordLoading, setRecordLoading] = useState(!!id);
+  const [recordError, setRecordError] = useState('');
+  const [studentRecord, setStudentRecord] = useState<any>(null);
+  const [guardians, setGuardians] = useState<any[]>([]);
+  const [guardianCredentials, setGuardianCredentials] = useState<{ username: string; temporary_password: string } | null>(null);
 
   const [form, setForm] = useState({
     first_name: '', middle_name: '', last_name: '',
@@ -20,16 +27,20 @@ export default function StudentFormPage() {
     blood_group: '', medical_info: '',
     previous_school: '', previous_class: '', admission_date: '',
     branch_id: '', class_id: '', section_id: '', session_id: '',
-    parent: { first_name: '', last_name: '', relationship: 'father', phone: '', email: '', occupation: '' },
+    status: 'active',
+    parent: { id: '', first_name: '', last_name: '', relationship: 'father', phone: '', email: '', occupation: '', address: '', workplace: '' },
   });
   const [priorRecord, setPriorRecord] = useState({
+    id: '',
     record_type: 'previous_gradesheet',
     title: '',
     notes: '',
     file_data: '',
     file_name: '',
     mime_type: '',
+    school_name: '', class_name: '', session_name: '',
   });
+  const [removeFile, setRemoveFile] = useState(false);
   const [createdCreds, setCreatedCreds] = useState<{
     admission_number: string;
     temporary_password: string;
@@ -59,14 +70,17 @@ export default function StudentFormPage() {
 
   useEffect(() => {
     if (id) {
+      setRecordLoading(true); setRecordError('');
       api.get(`/students/${id}`).then(res => {
         const s = res.data;
+        setStudentRecord(s); setGuardians(s.parents || []);
         setForm(prev => ({
-          ...prev, ...s,
-          parent: s.parents?.[0] || prev.parent,
+          ...Object.fromEntries(Object.keys(prev).map(key => [key, s[key] ?? prev[key as keyof typeof prev]])) as typeof prev,
+          parent: { ...prev.parent, ...Object.fromEntries(Object.entries(s.parents?.[0] || {}).map(([key, value]) => [key, value ?? ''])) },
         }));
         setSelectedClass(s.class_id || '');
-      });
+      }).catch(e => setRecordError(e.response?.data?.error || 'Could not load student details'))
+        .finally(() => setRecordLoading(false));
     }
   }, [id]);
 
@@ -77,7 +91,7 @@ export default function StudentFormPage() {
       setForm(prev => ({ ...prev, parent: { ...prev.parent, [field]: value } }));
     } else {
       setForm(prev => ({ ...prev, [name]: value }));
-      if (name === 'class_id') setSelectedClass(value);
+      if (name === 'class_id') { setSelectedClass(value); setForm(prev => ({ ...prev, section_id: '' })); }
     }
   };
 
@@ -89,19 +103,22 @@ export default function StudentFormPage() {
     }
     setLoading(true);
     try {
+      const payload: any = { ...form };
+      if (priorRecord.id || priorRecord.file_data || priorRecord.title || priorRecord.notes) {
+        const record: any = { ...priorRecord,
+          school_name: priorRecord.id ? priorRecord.school_name : priorRecord.school_name || form.previous_school || null,
+          class_name: priorRecord.id ? priorRecord.class_name : priorRecord.class_name || form.previous_class || null };
+        if (record.id && !record.file_data) { delete record.file_data; delete record.file_name; delete record.mime_type; }
+        if (removeFile) Object.assign(record, { file_data: null, file_name: null, mime_type: null });
+        payload.prior_records = [record];
+      }
       if (isEdit) {
-        await api.put(`/students/${id}`, form);
+        const response = await api.put(`/students/${id}`, payload);
+        for (const key of ['students', 'student-view', 'parents', 'parent-view']) void queryClient.invalidateQueries({ queryKey: [key] });
+        if (response.data.parent_credentials) { setGuardianCredentials(response.data.parent_credentials); return; }
         toast.success('Student updated successfully');
         navigate('/students');
       } else {
-        const payload: any = { ...form };
-        if (priorRecord.file_data || priorRecord.title || priorRecord.notes) {
-          payload.prior_records = [{
-            ...priorRecord,
-            school_name: form.previous_school || null,
-            class_name: form.previous_class || null,
-          }];
-        }
         const res = await api.post('/students', payload);
         setCreatedCreds({
           admission_number: res.data.admission_number,
@@ -154,6 +171,9 @@ export default function StudentFormPage() {
       </div>
     );
   }
+  if (recordLoading) return <p role="status" className="p-8">Loading complete student record…</p>;
+  if (recordError) return <p role="alert" className="p-8 text-red-700">{recordError}</p>;
+  if (guardianCredentials) return <section className="card max-w-xl space-y-4"><h1 className="text-xl font-semibold">Student updated and guardian account created</h1><p>Share these credentials securely. They are shown only once.</p><p>Guardian username: <code>{guardianCredentials.username}</code></p><p>Temporary password: <code>{guardianCredentials.temporary_password}</code></p><button type="button" className="btn-primary" onClick={() => navigate('/students')}>Done</button></section>;
 
   return (
     <div className="space-y-6">
@@ -178,6 +198,7 @@ export default function StudentFormPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Profile photo</label>
               <input type="file" accept="image/*" onChange={(e) => onPhoto(e.target.files?.[0] || null)} />
+              {form.photo && <button type="button" className="ml-3 text-sm text-red-700" onClick={() => setForm(prev => ({ ...prev, photo: '' }))}>Remove photo</button>}
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -236,7 +257,7 @@ export default function StudentFormPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
               <select name="branch_id" value={form.branch_id} onChange={handleChange} className="input-field">
                 <option value="">Select Branch</option>
-                {(Array.isArray(branches) ? branches : []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {(Array.isArray(branches) ? branches : []).map(b => <option key={b.id} value={b.id}>{b.branch_name || b.name}</option>)}
               </select>
             </div>
             <div>
@@ -273,14 +294,26 @@ export default function StudentFormPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Previous class</label>
               <input name="previous_class" value={form.previous_class} onChange={handleChange} className="input-field" />
             </div>
+            {isEdit && <label className="text-sm">Student status<select aria-label="Student status" name="status" className="input-field mt-1" value={form.status} onChange={handleChange}>
+              {['active', 'inactive', 'graduated', 'transferred', 'withdrawn', 'suspended', 'deceased'].map(status => <option key={status} value={status}>{status}</option>)}
+            </select></label>}
           </div>
         </div>
 
-        {!isEdit && (
+        <section className="card"><h2 className="mb-4 text-lg font-semibold">Health Information</h2><div className="grid gap-4 md:grid-cols-2">
+          <label className="text-sm">Blood group<input name="blood_group" value={form.blood_group} onChange={handleChange} className="input-field mt-1" /></label>
+          <label className="text-sm">Medical information<textarea name="medical_info" value={form.medical_info} onChange={handleChange} className="input-field mt-1" rows={3} /></label>
+        </div></section>
+        {(
           <div className="card">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Previous gradesheet / transfer transcript</h2>
             <p className="text-sm text-gray-500 mb-4">Attach prior academic records for transfer students. These stay in the student file.</p>
+            {isEdit && <div className="mb-4 space-y-2">{(studentRecord?.prior_records || []).map((record: any) => <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+              <span>{record.title || record.record_type} · {record.file_name || 'No attachment'}</span>
+              <button type="button" className="text-primary-600" onClick={() => { setPriorRecord({ id: record.id, record_type: record.record_type, title: record.title || '', notes: record.notes || '', file_data: '', file_name: record.file_name || '', mime_type: record.mime_type || '', school_name: record.school_name || '', class_name: record.class_name || '', session_name: record.session_name || '' }); setRemoveFile(false); }}>Edit prior record</button>
+            </div>)}{priorRecord.id && <button type="button" className="btn-secondary" onClick={() => { setPriorRecord({ id: '', record_type: 'previous_gradesheet', title: '', notes: '', file_data: '', file_name: '', mime_type: '', school_name: '', class_name: '', session_name: '' }); setRemoveFile(false); }}>Add a different prior record</button>}</div>}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(['school_name', 'class_name', 'session_name'] as const).map(key => <label key={key} className="text-sm">Prior record {key.replace('_name', '')}<input className="input-field mt-1" value={priorRecord[key]} onChange={e => setPriorRecord(prev => ({ ...prev, [key]: e.target.value }))} /></label>)}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Record type</label>
                 <select
@@ -311,12 +344,13 @@ export default function StudentFormPage() {
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    if (file.size > 8 * 1024 * 1024) {
-                      toast.error('File must be under 8MB');
+                    if (file.size > 5 * 1024 * 1024) {
+                      toast.error('File must be under 5MB');
                       return;
                     }
                     const reader = new FileReader();
                     reader.onload = () => {
+                      setRemoveFile(false);
                       setPriorRecord((prev) => ({
                         ...prev,
                         file_data: String(reader.result || ''),
@@ -329,6 +363,7 @@ export default function StudentFormPage() {
                   }}
                 />
                 {priorRecord.file_name ? <p className="text-xs text-green-600 mt-1">Attached: {priorRecord.file_name}</p> : null}
+                {priorRecord.id && priorRecord.file_name && <button type="button" className="mt-2 text-sm text-red-700" onClick={() => { setRemoveFile(true); setPriorRecord(prev => ({ ...prev, file_data: '', file_name: '', mime_type: '' })); }}>Remove attachment on save</button>}
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -343,9 +378,15 @@ export default function StudentFormPage() {
           </div>
         )}
 
-        {!isEdit && (
+        {(
           <div className="card">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Parent/Guardian Information</h2>
+            {isEdit && <><p className="mb-3 text-sm text-gray-500">Changes to a linked guardian also update that guardian's shared record for their other children.</p>
+              {guardians.length > 0 && <label className="mb-4 block text-sm">Guardian to edit<select aria-label="Guardian to edit" className="input-field mt-1" value={form.parent.id} onChange={e => {
+                const guardian = guardians.find(p => p.id === e.target.value);
+                setForm(prev => ({ ...prev, parent: { ...prev.parent, ...Object.fromEntries(Object.keys(prev.parent).map(key => [key, guardian?.[key] ?? ''])) } }));
+              }}>{guardians.map(p => <option key={p.id} value={p.id}>{p.first_name} {p.last_name}{p.is_primary ? ' (primary)' : ''}</option>)}</select></label>}
+            </>}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
@@ -376,6 +417,8 @@ export default function StudentFormPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
                 <input name="parent.occupation" value={form.parent.occupation} onChange={handleChange} className="input-field" />
               </div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Guardian address</label><input name="parent.address" value={form.parent.address} onChange={handleChange} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Workplace</label><input name="parent.workplace" value={form.parent.workplace} onChange={handleChange} className="input-field" /></div>
             </div>
           </div>
         )}
@@ -389,6 +432,7 @@ export default function StudentFormPage() {
           </button>
         </div>
       </form>
+      {isEdit && <PasswordReset key={id} resource="students" id={id!} username={studentRecord?.username} />}
     </div>
   );
 }

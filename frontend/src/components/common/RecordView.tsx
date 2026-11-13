@@ -1,4 +1,6 @@
 import { downloadDocument, escapeHtml } from '../../utils/printDocument';
+import { ReactNode } from 'react';
+import RecordDialog from './RecordDialog';
 
 export type ViewField = { label: string; value: unknown };
 
@@ -14,12 +16,12 @@ function display(value: unknown): string {
       if (item && typeof item === 'object') {
         const named = [item.first_name, item.last_name].filter(Boolean).join(' ');
         const teaching = [item.class_name, item.subject_name].filter(Boolean).join(' / ');
-        return named || item.name || teaching || item.description || item.fee_type_name || JSON.stringify(item);
+        return [named || item.name || teaching || item.description || item.fee_type_name || 'Record', item.admission_number, named ? item.class_name : null, item.relationship, item.session_name, item.section_name, item.phone, item.email].filter(Boolean).join(' · ');
       }
       return String(item);
     }).join(', ');
   }
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'object') return 'Details available in the linked record';
   return String(value);
 }
 
@@ -27,41 +29,38 @@ export default function RecordView({
   title,
   fields,
   onClose,
+  subtitle, photo, sections, actions, children,
 }: {
   title: string;
-  fields: ViewField[];
+  fields?: ViewField[];
   onClose: () => void;
+  subtitle?: string; photo?: string | null; sections?: { title: string; fields: ViewField[] }[]; actions?: ReactNode; children?: ReactNode;
 }) {
+  const groups = sections || [{ title: 'Record information', fields: fields || [] }];
   const html = `
+    ${photo && /^(https?:\/\/|data:image\/(png|jpeg|webp|gif);base64,)/i.test(photo) ? `<img src="${escapeHtml(photo)}" alt="Profile photo" style="width:110px;height:110px;object-fit:cover;border-radius:12px" />` : ''}
     <h1>${escapeHtml(title)}</h1>
-    <table>
-      <tbody>
-        ${fields.map((field) => `<tr><th>${escapeHtml(field.label)}</th><td>${escapeHtml(display(field.value))}</td></tr>`).join('')}
-      </tbody>
-    </table>
+    ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+    ${groups.map(group => `<h2>${escapeHtml(group.title)}</h2><table><tbody>${group.fields.map((field) => `<tr><th>${escapeHtml(field.label)}</th><td>${escapeHtml(display(field.value))}</td></tr>`).join('')}</tbody></table>`).join('')}
   `;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button type="button" className="text-sm text-gray-500" onClick={onClose}>Close</button>
-        </div>
-        <dl className="space-y-2 text-sm">
-          {fields.map((field) => (
-            <div key={field.label} className="grid grid-cols-3 gap-2">
-              <dt className="text-gray-500">{field.label}</dt>
-              <dd className="col-span-2 text-gray-900 break-words">{display(field.value)}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-5 flex justify-end">
-          <button type="button" className="btn-primary text-sm" onClick={() => downloadDocument(title, html)}>
-            Download
-          </button>
-        </div>
-      </div>
-    </div>
+    <RecordDialog title={title} subtitle={subtitle} photo={photo} onClose={onClose} actions={actions}>
+      {groups.map(group => <DetailSection key={group.title} title={group.title} fields={group.fields} />)}
+      {children}
+      <div className="flex justify-end"><button type="button" className="btn-primary text-sm" onClick={() => downloadDocument(title, html)}>Download details</button></div>
+    </RecordDialog>
   );
+}
+
+export function DetailSection({ title, fields }: { title: string; fields: ViewField[] }) {
+  return <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <h3 className="border-b border-gray-100 px-5 py-4 text-base font-semibold text-gray-900">{title}</h3>
+    <dl className="grid grid-cols-1 gap-x-8 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
+      {fields.map(field => <div key={field.label} className="min-w-0"><dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{field.label}</dt>
+        <dd className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-gray-900">{Array.isArray(field.value) && field.value.length
+          ? <ul className="space-y-2">{field.value.map((item, index) => <li key={index} className="border-l-2 border-primary-100 pl-3">{display([item])}</li>)}</ul>
+          : display(field.value)}</dd></div>)}
+    </dl>
+  </section>;
 }

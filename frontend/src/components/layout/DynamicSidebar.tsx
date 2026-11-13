@@ -394,7 +394,7 @@ export default function DynamicSidebar({ open, onClose }: SidebarProps) {
   const brandLetter = brandName.charAt(0).toUpperCase();
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex flex-col z-30 shadow-sm">
+    <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex flex-col z-40 shadow-sm">
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
         <div className="flex items-center gap-2 min-w-0">
           {branding?.logo ? (
@@ -414,7 +414,7 @@ export default function DynamicSidebar({ open, onClose }: SidebarProps) {
             </p>
           </div>
         </div>
-        <button onClick={onClose} className="lg:hidden text-gray-400 hover:text-gray-600">
+        <button aria-label="Close sidebar" onClick={onClose} className="lg:hidden text-gray-400 hover:text-gray-600">
           <X size={20} />
         </button>
       </div>

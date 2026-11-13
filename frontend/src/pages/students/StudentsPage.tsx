@@ -7,6 +7,9 @@ import api from '../../utils/api';
 import RecordActions from '../../components/common/RecordActions';
 import GradesheetView, { printGradesheet, GradesheetData } from '../../components/gradesheet/GradesheetView';
 import { PaginatedResponse, Student, Class, Branch } from '../../types';
+import RecordView, { fieldsFromRecord } from '../../components/common/RecordView';
+import PasswordReset from '../../components/common/PasswordReset';
+import { RecordFeedback } from '../../components/common/RecordDialog';
 
 export default function StudentsPage() {
   const [page, setPage] = useState(1);
@@ -33,7 +36,7 @@ export default function StudentsPage() {
     queryFn: () => api.get('/branches').then(r => r.data),
   });
 
-  const { data: viewed } = useQuery<any>({
+  const { data: viewed, error: viewError } = useQuery<any>({
     queryKey: ['student-view', viewId],
     queryFn: () => api.get(`/students/${viewId}`).then((r) => r.data),
     enabled: !!viewId,
@@ -211,49 +214,20 @@ export default function StudentsPage() {
         )}
       </div>
 
+      {viewId && !viewed && <RecordFeedback title="Student profile" error={viewError} onClose={() => setViewId(null)} />}
       {viewed && viewId && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-start justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl my-8">
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">{viewed.first_name} {viewed.last_name}</h2>
-                <p className="text-sm text-gray-500">{viewed.admission_number} · {viewed.class_name || 'No class'}</p>
-              </div>
-              <button type="button" className="btn-secondary" onClick={() => { setViewId(null); setSheet(null); }}>Close</button>
-            </div>
-            <div className="p-5 space-y-6">
-              <section>
-                <h3 className="font-medium text-gray-900 mb-2">Personal information</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                  <Info label="Gender" value={viewed.gender} />
-                  <Info label="Date of birth" value={viewed.date_of_birth} />
-                  <Info label="Phone" value={viewed.phone} />
-                  <Info label="Email" value={viewed.email} />
-                  <Info label="Address" value={viewed.address} />
-                  <Info label="Status" value={viewed.status} />
-                </div>
-              </section>
-              <section>
-                <h3 className="font-medium text-gray-900 mb-2">Academic information</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                  <Info label="Class" value={viewed.class_name} />
-                  <Info label="Section" value={viewed.section_name} />
-                  <Info label="Session" value={viewed.session_name} />
-                  <Info label="Previous school" value={viewed.previous_school} />
-                  <Info label="Previous class" value={viewed.previous_class} />
-                  <Info label="Branch" value={viewed.branch_name} />
-                </div>
-              </section>
-              <section>
-                <h3 className="font-medium text-gray-900 mb-2">Parents / guardians</h3>
-                {(viewed.parents || []).length ? (
-                  <ul className="text-sm space-y-1">
-                    {viewed.parents.map((parent: any) => (
-                      <li key={parent.id}>{parent.first_name} {parent.last_name} ({parent.relationship}) {parent.phone ? `· ${parent.phone}` : ''}</li>
-                    ))}
-                  </ul>
-                ) : <p className="text-sm text-gray-400">No parents linked</p>}
-              </section>
+        <RecordView title={[viewed.first_name, viewed.middle_name, viewed.last_name].filter(Boolean).join(' ')}
+          subtitle={`${viewed.admission_number} · ${viewed.class_name || 'No class assigned'} · ${viewed.status || 'Student'}`} photo={viewed.photo}
+          onClose={() => { setViewId(null); setSheet(null); }}
+          actions={<Link to={`/students/${viewId}/edit`} className="btn-primary">Edit student details</Link>}
+          sections={[
+            { title: 'Personal information', fields: fieldsFromRecord(viewed, { first_name: 'First name', middle_name: 'Middle name', last_name: 'Last name', date_of_birth: 'Date of birth', gender: 'Gender', nationality: 'Nationality', county: 'County' }) },
+            { title: 'Contact information', fields: fieldsFromRecord(viewed, { phone: 'Phone', email: 'Email', address: 'Address' }) },
+            { title: 'Academic and admission information', fields: fieldsFromRecord(viewed, { admission_number: 'Admission number', admission_date: 'Admission date', branch_name: 'Branch', class_name: 'Class', section_name: 'Section', session_name: 'Academic session', previous_school: 'Previous school', previous_class: 'Previous class', status: 'Status' }) },
+            { title: 'Health information', fields: fieldsFromRecord(viewed, { blood_group: 'Blood group', medical_info: 'Medical information' }) },
+            ...(viewed.parents || []).map((parent: any, index: number) => ({ title: `Parent / guardian ${index + 1}${parent.is_primary ? ' (primary)' : ''}`, fields: fieldsFromRecord(parent, { first_name: 'First name', last_name: 'Last name', relationship: 'Relationship', phone: 'Phone', email: 'Email', address: 'Address', occupation: 'Occupation', workplace: 'Workplace' }) })),
+          ]}>
+              <PasswordReset key={viewId} resource="students" id={viewId} username={viewed.username} />
               <section>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <h3 className="font-medium text-gray-900">Gradesheets</h3>
@@ -288,7 +262,9 @@ export default function StudentsPage() {
                           <p className="text-gray-500 capitalize">{String(record.record_type || '').replace(/_/g, ' ')}
                             {record.class_name ? ` · ${record.class_name}` : ''}
                             {record.school_name ? ` · ${record.school_name}` : ''}
-                          </p>
+                           </p>
+                           {record.session_name && <p className="text-gray-500">{record.session_name}</p>}
+                           {record.notes && <p className="mt-1 text-gray-700">{record.notes}</p>}
                         </div>
                         {record.has_file ? (
                           <button type="button" className="text-primary-600" onClick={() => openPriorFile(record.id)}>
@@ -302,19 +278,8 @@ export default function StudentsPage() {
                   <p className="text-sm text-gray-400">No transfer transcripts or prior class gradesheets on file.</p>
                 )}
               </section>
-            </div>
-          </div>
-        </div>
+        </RecordView>
       )}
-    </div>
-  );
-}
-
-function Info({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className="text-gray-800 capitalize">{value || '—'}</p>
     </div>
   );
 }

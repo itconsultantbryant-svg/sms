@@ -112,7 +112,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+    const token = jwt.sign({ userId: user.id, authVersion: Number(user.auth_version || 0) }, JWT_SECRET, { expiresIn: '24h' });
 
     res.json({
       token,
@@ -142,6 +142,7 @@ authRouter.get('/me', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
+    if (Number(decoded.authVersion || 0) !== Number(user.auth_version || 0)) return res.status(401).json({ error: 'Your password was updated. Please sign in again.' });
 
     res.json(mapUserResponse(user));
   } catch (error: any) {

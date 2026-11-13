@@ -18,7 +18,7 @@ const { chromium } = await import(process.env.E2E_PLAYWRIGHT_MODULE || 'playwrig
 const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
 try {
   const context = await browser.newContext();
-  await context.request.get(`${base}/login`, { headers: { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' } });
+  await context.request.get(`${base}/login`, { maxRedirects: 0, headers: { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' } });
   const page = await context.newPage();
   await page.goto(`${base}/login`);
   await page.getByPlaceholder('Username, email, or Student ID').fill(actors.admin.username);

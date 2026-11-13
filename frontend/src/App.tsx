@@ -15,6 +15,7 @@ import ParentDashboardPage from './pages/dashboard/ParentDashboardPage';
 import StudentsPage from './pages/students/StudentsPage';
 import StudentFormPage from './pages/students/StudentFormPage';
 import ParentsPage from './pages/parents/ParentsPage';
+import ParentFormPage from './pages/parents/ParentFormPage';
 import TeachersPage from './pages/teachers/TeachersPage';
 import TeacherFormPage from './pages/teachers/TeacherFormPage';
 import ClassesPage from './pages/academics/ClassesPage';
@@ -128,6 +129,7 @@ function AppContent() {
                 <Route path="/students" element={<StudentsPage />} />
                 <Route path="/students/new" element={<StudentFormPage />} />
                 <Route path="/students/:id/edit" element={<StudentFormPage />} />
+                <Route path="/parents/:id/edit" element={<ParentFormPage />} />
 
                 <Route path="/parents" element={<ParentsPage />} />
 

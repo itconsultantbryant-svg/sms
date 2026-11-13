@@ -54,7 +54,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     const user = db.prepare(`
       SELECT
         u.id, u.username, u.email, u.first_name, u.last_name,
-        u.role_id, u.user_type,
+        u.role_id, u.user_type, u.auth_version,
         u.institution_id, u.branch_id,
         r.role_code, r.role_name
       FROM users u
@@ -68,6 +68,9 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
       console.log('❌ User not found or inactive');
       res.status(401).json({ error: 'User not found or inactive' });
       return;
+    }
+    if (Number(decoded.authVersion || 0) !== Number(user.auth_version || 0)) {
+      res.status(401).json({ error: 'Your password was updated. Please sign in again.' }); return;
     }
 
     // Attach merged multi-role access
@@ -200,7 +203,8 @@ export function authorize(...roles: string[]) {
 }
 
 export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '24h' });
+  const user = getDatabase().prepare('SELECT auth_version FROM users WHERE id = ?').get(userId);
+  return jwt.sign({ userId, authVersion: Number(user?.auth_version || 0) }, JWT_SECRET, { expiresIn: '24h' });
 }
 
 // Permission-based authorization

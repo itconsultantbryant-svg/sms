@@ -4,7 +4,9 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, Edit2 } from 'lucide-react';
 import api from '../../utils/api';
 import { PaginatedResponse, Employee } from '../../types';
-import RecordView from '../../components/common/RecordView';
+import RecordView, { fieldsFromRecord } from '../../components/common/RecordView';
+import PasswordReset from '../../components/common/PasswordReset';
+import { RecordFeedback } from '../../components/common/RecordDialog';
 import RecordActions from '../../components/common/RecordActions';
 
 export default function TeachersPage({ staff = false }: { staff?: boolean }) {
@@ -17,7 +19,7 @@ export default function TeachersPage({ staff = false }: { staff?: boolean }) {
     queryFn: () => api.get('/teachers', { params: { page, limit: 20, search, staff: staff ? 1 : undefined } }).then(r => r.data),
   });
 
-  const { data: viewed } = useQuery<any>({
+  const { data: viewed, error: viewError } = useQuery<any>({
     queryKey: ['employee-view', viewId],
     queryFn: () => api.get(`/teachers/${viewId}`).then((r) => r.data),
     enabled: !!viewId,
@@ -116,21 +118,23 @@ export default function TeachersPage({ staff = false }: { staff?: boolean }) {
           </div>
         )}
       </div>
+      {viewId && !viewed && <RecordFeedback title="Teacher profile" error={viewError} onClose={() => setViewId(null)} />}
       {viewed && viewId && (
         <RecordView
           title={`${viewed.first_name || ''} ${viewed.last_name || ''}`.trim() || (staff ? 'Staff' : 'Teacher')}
+          subtitle={`${viewed.employee_id} · ${viewed.designation_name || (staff ? 'Staff member' : 'Teacher')}`}
+          photo={viewed.photo}
+          actions={!staff ? <Link className="btn-primary" to={`/teachers/${viewId}/edit`}>Edit teacher details</Link> : undefined}
           onClose={() => setViewId(null)}
-          fields={[
-            { label: 'Employee ID', value: viewed.employee_id },
-            { label: 'Department', value: viewed.department_name },
-            { label: 'Designation', value: viewed.designation_name },
-            { label: 'Phone', value: viewed.phone },
-            { label: 'Email', value: viewed.email },
-            { label: 'Branch', value: viewed.branch_name },
-            { label: 'Qualification', value: viewed.qualification },
-            { label: 'Assignments', value: viewed.assignments },
-          ]}
-        />
+          sections={[
+            { title: 'Personal information', fields: fieldsFromRecord(viewed, { first_name: 'First name', middle_name: 'Middle name', last_name: 'Last name', gender: 'Gender', date_of_birth: 'Date of birth' }) },
+            { title: 'Contact information', fields: fieldsFromRecord(viewed, { phone: 'Phone', email: 'Email', address: 'Address' }) },
+            { title: 'Employment and qualifications', fields: [...fieldsFromRecord(viewed, { employee_id: 'Employee ID', department_name: 'Department', designation_name: 'Designation', branch_name: 'Branch', qualification: 'Qualification', experience: 'Experience', employment_date: 'Employment date', employment_type: 'Employment type' }), { label: 'Status', value: viewed.is_active ? 'Active' : 'Inactive' }] },
+            ...(viewed.basic_salary !== undefined ? [{ title: 'Authorized financial information', fields: fieldsFromRecord(viewed, { basic_salary: 'Basic salary', bank_name: 'Bank name', bank_account: 'Bank account' }) }] : []),
+            { title: 'Teaching assignments', fields: [{ label: 'Classes, subjects and sessions', value: viewed.assignments }] },
+          ]}>
+          {!staff && <PasswordReset key={viewId} resource="teachers" id={viewId} username={viewed.username} />}
+        </RecordView>
       )}
     </div>
   );

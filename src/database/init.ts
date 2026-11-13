@@ -60,6 +60,7 @@ export function migrateInstitutionBranding(database?: any): void {
   ensureColumn(target, 'institutions', 'secondary_color', "TEXT DEFAULT '#3b82f6'");
   ensureColumn(target, 'institutions', 'accent_color', "TEXT DEFAULT '#f59e0b'");
   ensureColumn(target, 'users', 'extra_permissions', 'TEXT');
+  ensureColumn(target, 'users', 'auth_version', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(target, 'students', 'is_active', 'INTEGER DEFAULT 1');
   ensureColumn(target, 'invoice_items', 'fee_structure_id', 'TEXT');
   try {

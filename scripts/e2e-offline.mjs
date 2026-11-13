@@ -21,7 +21,7 @@ try {
   const term = (await api(actors.admin, '/academics/terms', 'POST', { session_id: fixture.sessionId, name: `Offline test ${Date.now()}`, start_date: '2026-09-01', end_date: '2027-01-31' })).data;
   const book = (await api(actors.admin, '/gradebook/generate', 'POST', { session_id: fixture.sessionId, term_id: term.id, class_id: fixture.classId, subject_id: fixture.subjectId, teacher_id: fixture.teacherId, columns: [{ name: 'Offline assessment', weight: 100, max_score: 100 }] })).data.created[0];
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-vercel-protection-bypass': bypass } });
-  await context.request.get(`${base}/login`, { headers: { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' } });
+  await context.request.get(`${base}/login`, { maxRedirects: 0, headers: { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' } });
   const page = await context.newPage();
   await page.goto(`${base}/login`);
   await page.getByPlaceholder('Username, email, or Student ID').fill(actors.teacher.username);
