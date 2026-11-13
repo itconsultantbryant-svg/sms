@@ -17,6 +17,9 @@
   "existingProductionPortalPasswordsChangedByTesting": false,
   "sharedRecordViewsStandardized": true,
   "exhaustiveAllModuleAcceptancePerformed": false,
-  "productionDeploymentVerification": "pending",
+  "productionDeploymentVerification": "passed",
+  "productionDeployment": "sms-llx55kqto-itconsultantbryant-svgs-projects.vercel.app",
+  "productionAlias": "https://sms-alpha-one.vercel.app",
+  "productionSmoke": { "passed": 7, "failed": 0, "evidence": "validation/production-profiles-smoke.json" },
   "details": "PROFILE_DETAILS_AND_PASSWORDS.md"
 }

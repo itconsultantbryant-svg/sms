@@ -1,0 +1,19 @@
+{
+  "verifiedAt": "2026-11-13T13:54:35.700Z",
+  "base": "https://sms-alpha-one.vercel.app",
+  "deployment": "sms-llx55kqto-itconsultantbryant-svgs-projects.vercel.app",
+  "applicationCommit": "0822367",
+  "passed": 7,
+  "failed": 0,
+  "checks": [
+    "Production alias serves the tested profile build without Vercel authentication",
+    "Production API and Neon healthy after authentication-version migration",
+    "Application authentication remains enforced",
+    "Administrator login and versioned session work without deployment bypass",
+    "Service worker remains publicly available as JavaScript",
+    "Fresh desktop production browser opens complete admission fields",
+    "Fresh mobile production browser opens complete admission fields and responsive navigation"
+  ],
+  "productionBusinessRecordsCreated": 0,
+  "productionPortalPasswordsChanged": 0
+}

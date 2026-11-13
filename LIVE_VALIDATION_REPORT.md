@@ -41,7 +41,9 @@ Student edit now saves the complete admission details, guardian information and 
 
 Administrators and registrars have record-scoped password reset controls for students, parents and teachers. New passwords work immediately; earlier online tokens are rejected using migrated account authentication versions, and pending password-change requests are superseded. Reset audits do not contain passwords. Offline devices learn about revocation only when reconnecting. Registrar profile/reset access does not confer salary/bank privileges.
 
-Evidence: **39 regression tests**, backend/frontend type checks, and **7 targeted desktop/mobile/browser/API checks** passed against `sms-aumnnsb94-itconsultantbryant-svgs-projects.vercel.app`. Earlier timeout/mobile-obstruction failures remain documented in `validation/profile-details-summary.json`. No new exhaustive all-module acceptance run is claimed. Details and migration requirements: `PROFILE_DETAILS_AND_PASSWORDS.md`. Production publication verification follows separately.
+Evidence: **39 regression tests**, backend/frontend type checks, and **7 targeted desktop/mobile/browser/API checks** passed against `sms-aumnnsb94-itconsultantbryant-svgs-projects.vercel.app`. Earlier timeout/mobile-obstruction failures remain documented in `validation/profile-details-summary.json`. No new exhaustive all-module acceptance run is claimed. Details and migration requirements: `PROFILE_DETAILS_AND_PASSWORDS.md`.
+
+Application commit `0822367` is deployed at `sms-llx55kqto-itconsultantbryant-svgs-projects.vercel.app` and the public production alias. **7 production smoke checks passed** without any deployment bypass: exact tested bundle/application entry, Neon health, application authentication enforcement, administrator/versioned login, worker JavaScript, desktop admission fields, and mobile admission/navigation. Existing production portal passwords and business records were not changed. Evidence: `validation/production-profiles-smoke.json`.
 
 ### Subsequent admissions iteration (November 10)
 
